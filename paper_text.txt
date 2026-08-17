@@ -1,0 +1,2102 @@
+A Cost-Effective Sequential Route Recommender System for 
+Taxi Drivers
+Junming Liu,
+a,
+* Mingfei Teng,
+b 
+Weiwei Chen,
+c 
+Hui Xiong
+d 
+a
+Department of Information Systems, City University of Hong Kong Hong Kong SAR, China; 
+b
+Department of Management Science and 
+Information Systems, Rutgers University, Newark, New Jersey 07102; 
+c
+Department of Supply Chain Management, Rutgers University, 
+Newark, New Jersey 07102; 
+d
+Thrust of Artificial Intelligence, The Hong Kong University of Science and Technology (Guangzhou), Nansha, 
+Guangdong 511458, China 
+*Corresponding author 
+Contact: junmiliu@cityu.edu.hk , 
+ https:/ /orcid.org/0000-0002-9301-0894 (JL); mingfei.teng@rutgers.edu , 
+ https:/ /orcid.org/0000-0003-2683-7207 (MT); 
+wchen@business.rutgers.edu , 
+ https:/ /orcid.org/0000-0002-7736-3411 (WC); xionghui@ust.hk , 
+ https:/ /orcid.org/0000-0001-6016-6465 (HX) 
+Received: May 10, 2021 
+Revised: December 20, 2021; June 8, 2022; 
+September 23, 2022; March 16, 2023 
+Accepted: March 18, 2023 
+Published Online in Articles in Advance: 
+May 12, 2023 
+https://doi.org/10.1287/ijoc.2021.0112 
+Copyright: © 2023 INFORMS
+Abstract. This paper develops a cost-effective sequential route recommender system to 
+provide real-time routing recommendations for vacant taxis searching for the next passen -
+ger. We propose a prediction-and-optimization framework to recommend the searching 
+route that maximizes the expected profit of the next successful passenger pickup based on 
+the dynamic taxi demand-supply distribution. Specifically, this system features a deep 
+learning-based predictor that dynamically predicts the passenger pickup probability on a 
+road segment and a recursive searching algorithm that recommends the optimal searching 
+route. The predictor integrates a graph convolution network (GCN) to capture the spatial 
+distribution and a long short-term memory (LSTM) to capture the temporal dynamics of 
+taxi demand and supply. The GCN-LSTM model can accurately predict the pickup proba -
+bility on a road segment with the consideration of potential taxi oversupply. Then, the 
+dynamic distribution of pickup probability is fed into the route optimization algorithm to 
+recommend the optimal searching routes sequentially as route inquiries emerge in the sys -
+tem. The recursion tree-based route optimization algorithm can significantly reduce the 
+computational time and provide the optimal routes within seconds for real-time imple -
+mentation. Finally, extensive experiments using Beijing Taxi GPS data demonstrate the 
+effectiveness and efficiency of the proposed recommender system.
+History: Accepted by Ram Ramesh, Area Editor for Data Science and Machine Learning. 
+Funding: This work was partially supported by the Hong Kong Research Grants Council [Grants CityU 
+21500220, CityU 11504322] and the National Natural Science Foundation of China [Grant 72201222]. 
+Supplemental Material: The software that supports the findings of this study is available within the paper 
+and its Supplemental Information (https:/ /pubsonline.informs.org/doi/suppl/10.1287/ijoc.2021. 
+0112) as well as from the IJOC GitHub software repository (https:/ /github.com/INFORMSJoC/2021. 
+0112). The complete IJOC Software and Data Repository is available at https:/ /informsjoc.github.io/. 
+Keywords: recommender system • deep learning • business effective strategy • route recommendation
+1. Introduction
+The availability of global positioning system (GPS) trajectory data with rich information of human mobility pro -
+vides an unprecedented opportunity for real-time mobile recommender systems, including location-based market -
+ing (Hopkins and Turner 2012 ), public transit systems (Du et al. 2019 ), travel tour recommendation (Ge et al. 2014 ), 
+and ride-hailing service (Feng et al. 2020 ). Despite many studies on human mobility pattern discovery and traffic 
+demand prediction using GPS data, taxi companies are facing a business opportunity and a technical challenge of 
+exploiting massive taxi GPS data to provide direct guidance for vacant taxis in search of their next passenger (Ge 
+et al. 2010 ). Different from the mobility-on-demand ride-hailing systems (Alonso-Mora et al. 2017 , Braverman et al. 
+2019 , Feng et al. 2020 , Zhu et al. 2021 ), such as DiDi, Uber, and Lyft, taxi companies in urban cities, such as Beijing 
+Taxi and NYC Yellow Cab, provide street-hail services where taxi drivers search for the next passenger through a 
+searching route according to their experience and habit. However, because of the lack of local information on pas -
+senger distribution and surrounding taxi activities, taxi drivers are constantly concerned about the difficulties in 
+finding the next passenger and the low profit due to competition among vacant taxis.
+Recent efforts have been made to develop intelligent mobile route recommender systems for taxi drivers who 
+offer street-hail services, aiming to optimize the searching route for vacant taxis (Xiao et al. 2020 ). Such a mobile 
+route recommender system suggests a searching strategy for a taxi driver subscribed to this service, as soon as the 
+1098 
+INFORMS JOURNAL ON COMPUTING 
+Vol. 35, No. 5, September–October 2023, pp. 1098–1119 
+ISSN 1091-9856 (print), ISSN 1526-5528 (online) 
+https://pubsonline.informs.org/journal/ijoc 
+taxi becomes vacant and submits a route query. Existing methods can be categorized into three groups. The first 
+group of methods provides an energy-efficient strategy of waiting for the next passenger by suggesting a list of 
+potential parking points with the highest pickup probability (Ge et al. 2010 , Yuan et al. 2013a , Xu et al. 2016 , Kong 
+et al. 2017 ). The second group provides a proactive strategy in search of the next passenger by suggesting a route 
+consisting of a series of pickup locations with the shortest searching distance or searching time (Wu et al. 2017 , 
+Garg and Ranu 2018 , Qu et al. 2020 ). The last group of methods, represented by Qu et al. ( 2014 ), focuses on optimiz -
+ing the net profit of the searching route offered to a single taxi by combining the passenger pickup probability and 
+expected profit.
+Despite the previous efforts, developing a practical cost-effective route recommender system that responds in 
+real-time remains challenging. First, to provide route recommendations, an accurate prediction of passenger pickup 
+probability is desired at the road segment level. Existing studies of traffic demand prediction, including the autore -
+gressive methods (Li et al. 2012 , Moreira-Matias et al. 2013 ), recurrent neural networks (Xu et al. 2017 ), and graph 
+convolution network (GCN)-based predictors (Jiang and Luo 2021 ), were developed based on the temporal or spa -
+tial dependencies of traffic speed or traffic flow. However, the taxi route recommendation requires a dynamic pas -
+senger pickup predictor, which remains technically challenging because of multiple impact factors, such as time, 
+road network, weather conditions, traffic conditions, and simultaneous modeling of taxi supply and demand. Sec -
+ond, the pickup probability predictor needs to be embedded into a route optimization strategy to maximize the 
+expected profit. Because of the large route searching space in a complex road network and a large number of taxis 
+requesting recommendation solutions, a real-time sequential route searching algorithm remains unexplored. It is 
+also vital to avoid recommendation overload, which is a phenomenon due to the repeated recommendations of the 
+same searching route to too many taxi drivers, causing taxi congestion, and profit decline (Qu et al. 2014 , Xiao et al. 
+2020 ). However, existing taxi recommender systems, including the aforementioned energy-efficient, shortest-route, 
+and cost-effective recommender systems, are supported by offline recommendation algorithms that do not care -
+fully address the issue of recommendation overload.
+To address the aforementioned technical challenges, we propose a new cost-effective sequential route recom -
+mendation method, combining a deep learning-based prediction model for road segment-level pickup probabil -
+ity predictions and a recursive route searching algorithm for real-time optimal route recommendations. 
+Specifically, the deep learning-based prediction model is based on a GCN and long short-term memory (LSTM) 
+to capture the dynamic human mobility patterns and taxi demand-supply distribution from both topological 
+and temporal perspectives. Meanwhile, context information, such as weather conditions, is also considered to 
+improve prediction accuracy. Different from the existing GCN-based traffic demand or speed prediction meth -
+ods (Jiang and Luo 2021 ), the proposed GCN-LSTM model is developed for passenger pickup probability pre -
+diction, which integrates the long-term and short-term patterns of taxi demand-supply distribution in a 
+topological road network. As such, it captures the neighborhood taxi searching behavior and customer demand 
+changes caused by previous recommendations, enabling a more timely and precise prediction of pickup proba -
+bility that dynamically balances the taxi demand and supply to avoid recommendation overload. Furthermore, 
+to improve computational efficiency for route optimization, we integrate the pickup probability predictor with 
+a recursive route searching algorithm to support real-time route recommendations for a sequence of taxi drivers. 
+The pickup probabilities are updated dynamically according to surrounding taxis’ previously scheduled driv -
+ing routes to avoid recommendation overload. We take the distribution of pickup probability as an input to esti -
+mate the potential profit of candidate searching routes represented by a recursion tree structure, significantly 
+reducing the size of route searching space for real-time recommendations. As such, we can serve more than 
+3,200 taxis in a large road network consisting of 18,301 road segments, as demonstrated in our numerical experi -
+ments using the Beijing Taxi GPS data. The performance of the proposed system sets a new benchmark against 
+the state-of-the-art route recommender systems for taxi drivers and confirms its effectiveness in addressing the 
+recommendation overload issue.
+The remainder of this paper is organized as follows. Section 2 summarizes the related literature. In Section 3 , we 
+present the proposed sequential route recommender system framework. Sections 4 and 5 introduce in detail the 
+proposed dynamic pickup probability prediction model and sequential route optimization model, respectively. 
+Numerical experiments using real-world data from Beijing Taxi are reported in Section 6 . Finally, Section 7 con -
+cludes this work.
+2. Related Work
+The recent advances in wireless sensor technologies in mobile environments have enabled extensive mobile appli -
+cations, which have motivated tremendous efforts to improve work efficiency and effectiveness for taxi drivers 
+Liu et al.: Sequential Route Recommendation 
+INFORMS Journal on Computing, 2023, vol. 35, no. 5, pp. 1098–1119, © 2023 INFORMS 1099 
+(Zhu et al. 2014 ). The related literature mainly focuses on traffic demand prediction and route recommender sys -
+tems, to be reviewed separately in another article.
+2.1. Traffic Demand Prediction
+The prediction of traffic demand has been investigated as a key to the success of intelligent transportation systems 
+(Yuan and Li 2021 ). Early studies of traffic demand were focused on understanding the spatiotemporal patterns of 
+taxi trips and taxi driving behavior (Hochmair 2016 , Xu et al. 2016 ). Detecting hot spots of taxi traffic has been stud -
+ied for taxi relocation, aiming to find the regions with high taxi demand (Moreira-Matias et al. 2013 , Xu et al. 2017 , 
+Yao et al. 2018 ) or extreme traffic conditions (Li et al. 2021 ). In terms of forecasting methodologies, one line of the lit -
+erature considers traffic demand prediction as a time series forecasting problem and builds on autoregressive inte -
+grated moving average (ARIMA)-based autoregressive models to predict passenger demands in certain hot spots 
+and taxi stands (Li et al. 2012 , Moreira-Matias et al. 2013 ). Chang et al. ( 2010 ) improved taxi demand prediction 
+accuracy by integrating context information of the time, weather, and taxi location. The other line of related work 
+uses machine learning and deep sequence models to improve prediction accuracy. Xu et al. ( 2017 ) and Zhang et al. 
+( 2022 ) implemented recurrent neural networks for taxi demand hot spots detection. Yu et al. ( 2017 ) built a deep neu -
+ral network based on LSTM for traffic prediction in extreme conditions. A deep multiview spatial-temporal net -
+work model by integrating the LSTM model and the convolutional neural network (CNN) was developed for taxi 
+pickup demand in big regions (0.7 km × 0.7 km; Yao et al. 2018 ).
+More recently, the success of graph neural networks (GNNs) has shown superior performance on modeling graph- 
+based networks (Wu et al. 2020a ), such as document citation networks (Thekumparampil et al. 2018 , Liu et al. 2020 ), 
+social networks (Fan et al. 2019 , Ma et al. 2021 ), and network-based traffic demand prediction (Jiang and Luo 2021 ). 
+With the great potential in road network modeling, the gated attention networks (GaANs) (Zhang et al. 2018 ) and the 
+multivariate graph neural network (MTGNN) (Wu et al. 2020b ) demonstrated the advances of graph modeling in traf -
+fic flow prediction. A newly emerging GNN-based model is the GCN, which enables the modeling of spatial distribu -
+tion as topological graphs (Kipf and Welling 2017 ). The GCN has excellent advantages for spatial traffic demand 
+analysis in a road network once combined with the temporal dynamic property. Lin et al. ( 2018 ) implemented GCN 
+to learn hidden heterogeneous pairwise correlations between bike stations to predict station-level traffic demand in a 
+bike-sharing network. Other GCN variants were proposed to study traffic flow with a multigraph convolutional neu -
+ral network model (Chai et al. 2018 ) and an attention-based spatial-temporal graph convolutional network (Guo et al. 
+2019 ). Du et al. ( 2020 ) proposed a dynamic transition GCN to simultaneously extract temporal and spatial features to 
+obtain accurate demand predictions for taxi transition demand between origin-destination (OD) pairs.
+Indeed, existing regional traffic speed and traffic demand prediction methods have built the foundation for intel -
+ligent mobile recommendation systems that suggest the optimal routes between OD pairs with the minimum driv -
+ing time or the hot spots with large taxi demand. However, because of the following three limitations, they are not 
+directly applicable to the cost-effective route recommendation that maximizes taxi profit. First, the current autore -
+gressive methods, recurrent neural networks, and GCN-based methods were developed based on the temporal or 
+spatial dependencies of one single factor of either traffic speed or traffic flow. However, maximizing the expected 
+profit of a searching route depends on an accurate pickup probability estimation, which requires simultaneous 
+modeling of taxi supply and demand distribution. The supply distribution depicts taxis’ searching behaviors and 
+the demand distribution profiles the locations of future customers. Second, existing GCN-based methods were 
+developed to model the short-term dependencies of traffic demand. As both taxis’ searching behavior and custo -
+mers’ demand distribution have daily and hourly patterns, it is desirable to capture the long-term dependencies in 
+the road network in addition to the short-term dependencies. Finally, existing mobile recommender systems have 
+not considered how recommendations made to current taxis would change future pickup probability. To wit, Qu 
+et al. ( 2014 ) first pointed out the importance of taxi pickup probability on road segments for the cost-effective route 
+recommender systems; Qu et al. ( 2014 ) and Sun et al. ( 2017 ) only considered a simple historical mean method to 
+estimate pickup probability; and Yuan et al. ( 2011 ) considered the spatial dependency of pickup probability in road 
+clusters. To close the aforementioned research gaps and improve the accuracy of pickup probability prediction, this 
+paper extends the GCN-based methods by integrating the long-term and short-term patterns of taxi demand- 
+supply distributions in a topological road network, as well as by considering the mutual dependence of current 
+recommendations and future pickup probability distributions.
+2.2. Mobile Route Recommender System
+The route recommender systems for taxi drivers aim to leverage historical taxi GPS traces for improving recom -
+mendation performance. It has been formulated with various objectives to provide routing suggestions for a vacant 
+taxi searching for the next passenger. Ge et al. ( 2010 ) developed an energy-efficient mobile recommender system 
+Liu et al.: Sequential Route Recommendation 
+1100 INFORMS Journal on Computing, 2023, vol. 35, no. 5, pp. 1098–1119, © 2023 INFORMS 
+for an optimal sequence of waiting points for the next passenger. Yuan et al. ( 2010 , 2011 , 2013a , b ) and Ge et al. 
+( 2021 ) worked on a series of intelligent taxi services, such as pickup point detection and driving direction recom -
+mendation. Kong et al. ( 2017 ) further developed a recommender system with a time-location combined service rec -
+ommendation to provide top N recommended passenger searching areas. However, these studies only focus on 
+pickup point recommendations while ignoring the potential profit of exact searching routes. Qu et al. ( 2014 ) first 
+provided an entire driving route instead of discrete pickup points based on the expected profit for taxi drivers. Sim -
+ilar research has been conducted to recommend searching routes for taxi drivers with the objective of minimizing 
+the waiting time or the searching distance (Wu et al. 2017 , Garg and Ranu 2018 , Qu et al. 2020 , Ye et al. 2019 ). Ye et al. 
+( 2018 ) compared the recommender systems with different objective functions, and Wang et al. ( 2019 ) found that 
+taxi drivers could improve hourly earnings by selecting long trips rather than aiming for cruising-time reduction. 
+However, both the relocation and route recommendation did not consider the recommendation overload issue in a 
+real-time environment for a sequence of vacant taxi drivers searching in the same region.
+2.3. Recommendation Overload
+Traditional recommender systems may repeatedly recommend the same or similar items to a group of customers, 
+resulting in system-generated best-selling products and a low recommendation diversity that decreases users’ pur -
+chase intention and recommendation effectiveness. Similarly, recommendation overload can happen in a route rec -
+ommender system if the same route is recommended to too many drivers in the same area (Qu et al. 2014 ). Qu et al. 
+( 2014 ) introduced a top K sequential recommendation framework that compares trajectory similarities between 
+subsequently recommended routes to mitigate the influence of prior recommendations made to surrounding taxis. 
+The top K strategy avoids recommending the same route repeatedly, but it does not consider the profit difference 
+on alternative routes and may direct taxis to a route with a low expected profit. Xiao et al. ( 2020 ) proposed a multi -
+user mobile sequential recommendation system that recommends nonoverlapped searching routes to a group of 
+taxis with a road capacity constraint. However, this system assumes that taxis start searching simultaneously and is 
+not applicable for sequential recommendations when taxis come in a sequence. In real-world practices, a recom -
+mendation should be made within seconds of a submitted query. Thus, the demand and supply distribution can 
+change as recommended routes are sent to taxi drivers. However, the existing route recommender systems do not 
+incorporate recommended searching routes for future route recommendations. In this paper, we will achieve a bal -
+anced taxi supply and demand distribution by considering the potential recommendation overload.
+3. Sequential Route Recommender System Framework
+This section introduces the preliminaries and research data and then presents the key research modules of the 
+sequential route recommender system.
+3.1. Preliminaries
+We provide some basic concepts and definitions of terminologies, which will be used throughout this paper. The 
+sets and parameters of the problem under study are summarized in Table 1 and will be explained in more detail 
+subsequently. Additional notation specific to the deep learning model and the route searching algorithm will be 
+introduced in their respective sections later.
+Definition 1 ( Road Segment ). A road segment r associated with two junctions (such as an intersection, a round -
+about, and a dead end) is the unit component of a driving route. It has several static properties including the 
+one-way driving direction and segment length. For each period t, a road segment r can be used as the basic sen -
+sor for recording the number of pickup orders o
+r,t 
+and the number of vacant taxis v
+r,t 
+as the spatial distribution of 
+taxi demand and supply, respectively. Each segment r has several adjacent segments directly connected to it. We 
+define road segment r’s adjacent segments A
+r 
+as the segments to which a taxi can drive directly from r. The travel 
+time t
+r 
+for the road segment r is estimated by dividing the segment length by the average driving speed of taxis 
+on segment r within the same time period from the historical data. If the historical data are missing for a seg -
+ment, a 20-km/h driving speed is used to calculate the travel time.
+Definition 2 ( Road Network ). A road network G
+r
+0
+�< V , E > is a directed graph with the searching-start road seg -
+ment r
+0 
+at the center, where V represents the node set consisting of all road segments in this network, and the 
+edge (r
+i
+, r
+j
+) in set E records the direct connection from road segment r
+i 
+to r
+j
+. The road network G
+r
+0 
+consists of all 
+road segments that the vacant taxi can visit from the searching-start segment r
+0
+.
+Definition 3 ( Searching Route ). A searching route R
+r
+0 
+is represented by a sequence of road segments R
+r
+0
+� < r
+0
+, r
+1
+, 
+: : : , r
+n
+>, where n is the number of road segments on this route following r
+0
+. Starting from road segment r
+0
+, a taxi 
+Liu et al.: Sequential Route Recommendation 
+INFORMS Journal on Computing, 2023, vol. 35, no. 5, pp. 1098–1119, © 2023 INFORMS 1101 
+driver can choose several searching routes, which form a route candidate set S
+r
+0
+. Each eligible route in S
+r
+0 
+is 
+bounded by a maximum searching time τ  (e.g., 10 minutes as used in this paper), that is, t
+r
+0
++ t
+r
+1
++ ⋯ + t
+r
+n
+≤ τ. 
+Hence, n can be different for different routes in S
+r
+0
+.
+Definition 4 ( Sequential Route Recommendation ). A mobile route recommendation system aims to recommend a 
+searching route for a vacant taxi in search of the next passenger. Furthermore, the route recommendations are 
+made sequentially as route enquiries emerge in the system. Although optimizing the search routes over a group 
+of taxis can be superior to optimizing over the same group sequentially, real-world practices require a recom -
+mendation to be made within seconds whenever a route query is received. Thus, waiting for a buffer of route 
+queries may result in a high query response latency, except for the very rare case when a group of queries 
+emerges at the same time in the same region.
+As taxi drivers highly prefer searching routes with high pickup probabilities and high earnings per trip (Wang 
+et al. 2019 ), we consider the next pickup event on a road segment r ∈ R
+r
+0 
+with a probability p
+r 
+and an expected 
+earning e
+r 
+from this pickup. Here, e
+r 
+is estimated by averaging earnings in historical pickup events that happened 
+on road segment r (Qu et al. 2014 ). Then, the expected profit (earning), G
+s
+(R; r
+0
+, t
+0
+), of searching along a given 
+route R �< r
+0
+, r
+1
+, : : : , r
+n
+>, starting at road segment r
+0 
+and time t
+0
+, is defined as follows:
+G
+s
+(R; r
+0
+, t
+0
+) � p
+r
+0
+e
+r
+0
++
+X
+n
+i�1
+Y
+i� 1
+j�0
+(1 � p
+r
+j
+)p
+r
+i
+e
+r
+i
+, (1) 
+where the expected profit of picking up a passenger on road segment r
+i 
+(r
+i
+∈ R) is defined as 
+Q
+i� 1
+j�0
+(1 � p
+r
+j
+)p
+r
+i
+e
+r
+i
+, con -
+sidering the probability that a taxi does not find a passenger until reaching road segment r
+i
+. Hence, the sequential 
+route recommendation problem searches for an optimal route R ∈ S
+r
+0 
+that maximizes G
+s
+(R; r
+0
+, t
+0
+). Because all eligi -
+ble routes in S
+r
+0 
+are bounded by the maximum searching time τ, the mobile route recommendation problem under 
+study aims to provide a searching route with the maximum expected profit for a taxi within a searching time limit 
+of τ. A larger value of τ  generally allows a longer searching path with more road segments n and thus a higher 
+expected profit. However, because the expected earning on a road segment is discounted by the probability term in 
+Equation ( 1 ), the marginal value of the added expected profit for increasing τ  will diminish. Qu et al. ( 2014 ) sug -
+gested a fixed number of searching road segments n � 5. To make a fair comparison of expected earnings per 
+minute, we consider a fixed searching time limit of 10 minutes in our numerical experiment in Section 6 .
+To illustrate the above definition of the sequential route recommendation problem, Figure 1(a) presents a sce -
+nario where two taxis arrive at road segment A in sequence and are recommended a searching route each. In the 
+left subfigure of Figure 1(a) , taxi 1 arrives at road segment A at time t and is recommended an optimal route “A- 
+D-E-J” based on the estimated pickup probabilities on all road segments. Consequently, taxi 1 becomes an active 
+supply along this route, which decreases the pickup probabilities on road segments A, D, E and J. In the right 
+Table 1. Notation
+Sets Description
+A
+r
+Set of road segments adjacent to road segment r
+R
+r
+A searching route starting from road segment r
+G
+r
+A road network with the searching-start road segment r at the center
+S
+r
+Set of searching routes starting from road segment r
+K A queue of taxis requesting route recommendations
+Υ
+r
+Recursion tree with searching-start road segment r as the root node
+G
+s
+(R; r, t) Expected profit by searching along route R starting from r at time t
+G
+w
+(R; r, t) Expected profit by driving to the virtual station along route R and waiting for the next passenger
+Parameters
+n Number of road segments in a route
+N Number of road segments in the road network
+d Number of input features for pickup probability prediction
+p
+r
+Pickup probability on road segment r
+e
+r
+Expected earning per pickup event on road segment r
+t
+r
+Driving time along road segment r
+T
+R
+Driving time along route R
+T
+r
+Waiting time at the virtual station on road segment r
+v
+r,t
+Number of vacant taxis on road segment r at time period t
+o
+r,t
+Number of pickup events on road segment r at time period t
+T Searching time limit
+Liu et al.: Sequential Route Recommendation 
+1102 INFORMS Journal on Computing, 2023, vol. 35, no. 5, pp. 1098–1119, © 2023 INFORMS 
+subfigure, when taxi 2 submits a query while taxi 1 is still searching along route “A-D-E-J,” this route may 
+become suboptimal due to the decreases in pickup probabilities. Thus, another route “A-C-K” becomes optimal 
+and is recommended to taxi 2.
+As seen from the previous example, an intelligent route recommendation system should provide alternative 
+searching routes for a sequence of vacant taxis competing in the same region, whenever one particular route has 
+been overly recommended. In this paper, we incorporate the searching routes of the previously recommended 
+taxis to update the pickup probability distribution, so as to help the subsequent taxis avoid recommendation 
+overload.
+Definition 5 ( Virtual Station ). Taxi, as a station-free transportation mode, can have arbitrary passenger pickup 
+locations scattered around urban areas. During certain periods, traffic demands tend to congregate in certain 
+areas, such as a school entrance when the school is over or a residential area during rush hours. Experienced taxi 
+drivers can identify the virtual stations where they can wait for the next passenger rather than driving along a 
+route to search for a passenger (Ge et al. 2010 ). Accordingly, we identify a set of virtual stations on certain road 
+segments where taxi drivers may stop and wait for the next passenger. A virtual station is active when it is more 
+profitable waiting than actively searching along a route, and thus may only be active during certain time periods. 
+For example, a residential entrance is an active virtual station during morning rush hours while staying inactive 
+during other time periods.
+When adopting the waiting strategy, taxi drivers choose to give up the potential profit of searching along a 
+route. Therefore, given the current location r
+0 
+of a taxi driver and the location of a selected virtual station r, the 
+potential net profit of the waiting strategy G
+w
+(R; r
+0
+, t
+0
+) can be computed as follows:
+G
+w
+(R; r
+0
+, t
+0
+) �
+1
+T
+R
++ T
+r
+e
+r
+, 
+where R represents the shortest route from r
+0 
+to the virtual station r, T
+R 
+is the attendant driving time, and T
+r 
+is the 
+extra time the taxi driver spends in a waiting line at virtual station r for the next passenger. Figure 1(b) presents 
+the distribution of 90 virtual station candidates in our data set, comprised of taxi stands and pickup hot spots. 
+These virtual stations are extracted with the following criteria: (1) the pickup frequency is larger than 100 at this 
+location, and (2) taxis wait for more than three minutes with a driving speed of zero followed by a pickup event 
+during peak hours.
+3.2. Research Data
+We study the route recommendation problem for Beijing Taxi. Summary statistics of the Taxi GPS trace data, the 
+Beijing City road network data, and the meteorology data used in this study are presented in Table 2 . The research 
+data can be found at the GitHub site of this paper (Liu et al. 2023 ).
+3.2.1. Road Network. The road network of the urban areas in Beijing City consists of 18,301 road segments, indexed 
+by two vertices on a single segment. Two or more segments are connected if they share the same vertex. A road seg -
+ment is one-way if the driving directions of all taxis passing through this segment are identical.
+3.2.2. Taxi GPS Traces. Each GPS record has the information of taxi ID, GPS location, service status (occupied or 
+vacant), fare identifier for midnight and airport surcharge, driving direction, driving speed, and time stamp. The 
+GPS trace is recorded at a maximum frequency of every three seconds. The research data are derived from the taxi 
+Figure 1. (Color online) Example of Different Route Recommendation Strategies 
+Notes. (a) Searching route recommendation. (b) Virtual station candidates.
+Liu et al.: Sequential Route Recommendation 
+INFORMS Journal on Computing, 2023, vol. 35, no. 5, pp. 1098–1119, © 2023 INFORMS 1103 
+GPS traces. We identify the first “occupied” GPS point after a series of “vacant” GPS points as a record of pickup 
+event, and the first vacant GPS point after a series of occupied GPS points as a record of drop-off event. The pickup 
+probability of a road segment during period t is then defined as the number of pickup events divided by the total 
+number of vacant passing-by taxis. For each time period t in the historical data, on a road segment r, we count the 
+number of pickup orders o
+r,t 
+up to time t and the number of vacant taxis v
+r,t 
+to represent the taxi demand and supply 
+on road segment r at time t. Thus, the values of o
+r,t 
+and v
+r,t 
+over the entire road network represent the spatial distri -
+bution of taxi demand and supply, respectively, at time t. If a vacant taxi drives through the same road segment 
+multiple times within a single period, we count it as one single supply. Based on this historical data, we can train 
+prediction models to forecast the pickup probability on each road segment at each time period, given the available 
+taxi supplies on each road. More than 3,200 in-service taxis are included with their GPS traces recorded during a 
+seven-day period. In total, our data set has 88.98 million GPS points and 1.35 million pickup and drop-off activities.
+We present the taxi activities in our data set during morning rush hours in Figure 2 . Each dot in Figure 2 repre -
+sents a road segment with its size representing the number of passing by vacant taxis and the color representing the 
+pickup probabilities. It is seen that the pickup probability is low for some road segments with large taxi supplies. 
+Most taxi drivers suffer from a low pickup probability or short trips. Even for the taxi drivers who prefer searching 
+or waiting in the highly demanded regions, their pickup probability can be low due to taxi oversupply, highlighting 
+the importance of considering recommendation overload in this paper.
+3.3. System Framework
+The overarching goal of the cost-effective sequential route recommendation (C-SRR) problem is to optimize the 
+driving routes for a sequence of vacant taxis. Once a route query from a taxi driver is received at time t
+0 
+from a 
+Table 2. Summary Statistics of the Data Sets
+Data source Data information 24-hour full set 8 a.m. to 11 a.m. 1 p.m. to 3 p.m. 5 p.m. to 8 p.m.
+Taxi GPS traces No. of road segments 18,301 18,301 18,301 18,301
+No. of in-service taxis 3,258 3,250 3,249 3,256
+No. of GPS points 88.98 million 11.15 million 7.05 million 11.08 million
+No. of pickup events 1.35 million 0.18 million 0.12 million 0.23 million
+Profit per trip 24.17 (617.03) 25.28 (618.94) 23.07 (617.55) 23.57 (617.21)
+Meteorology data Temperature [26.08, 57.79] 
+◦
+F [26.08, 51.22] 
+◦
+F [35.56, 57.79] 
+◦
+F [35.56, 54.51] 
+◦
+F
+Visibility [0.99, 6.21] mile [2.80, 6.21] mile [1.24, 6.21] mile [0.99, 6.21] mile
+Wind speed [0.0, 13.42] mph [1.04, 8.96] mph [1.04, 6.34] mph [0.00, 4.69] mph
+Humidity [15%, 79%] [19%, 70%] [15%, 58%] [17%, 78%]
+Figure 2. (Color online) Distribution of Taxi Activities During Morning Rush Hours (8 a.m. to 11 a.m.) 
+Liu et al.: Sequential Route Recommendation 
+1104 INFORMS Journal on Computing, 2023, vol. 35, no. 5, pp. 1098–1119, © 2023 INFORMS 
+searching-start segment r
+0
+, the optimal route needs to be recommended immediately without the knowledge of 
+any subsequent queries from other drivers. In this paper, we propose a new combined forecasting and optimization 
+framework consisting of a dynamic pickup probability predictor and a cost-effective route recommendation 
+algorithm. 
+• Dynamic Pickup Probability Prediction. An accurate prediction of road segment-level pickup probability is 
+essential for a balanced route recommendation. The main challenges are to fully utilize the time dynamics of 
+human mobility, and to embed the taxi supply distribution in a road network for an accurate prediction.
+• Cost-Effective Route Recommendation. Given a queue of taxis K requesting route recommendation, their 
+query time {t
+k
+| k ∈ K}, query road segment {r
+k
+| k ∈ K}, and the pickup probability distributions updated at the query 
+time, we aim to recommend the optimal searching route for each query (taxi) with the goal of maximizing the 
+expected profit for the next successful pickup event within time period τ. Formally, for the kth query starting at t
+k 
+on road segment r
+k
+, we aim to find the optimal cost-effective route R
+∗
+r
+k 
+from the route candidate set S
+r
+k 
+by maximiz -
+ing the expected profit:
+R
+∗
+r
+k
+� ar g m a x
+R
+r
+k
+∈S
+r
+k
+, m∈{w , s}
+G
+m
+(R
+r
+k
+; r
+k
+, t
+k
+): ( 2) 
+These two research modules are interconnected. The pickup probability and its associated expected profit are essen -
+tial inputs for the route recommendation. Meanwhile, the route recommended to a driver can affect the taxi supply 
+along the route and its corresponding pickup probability. In addition, there is a possibility that a taxi fails to find 
+any passengers after searching along a recommended route. To address these practical challenges, we propose a 
+cost-effective sequential recommender system considering recommendation overload and recommendation restart. 
+Figure 3 presents the framework of the proposed mobile route recommender system, which provides the optimal 
+searching routes for a queue of vacant taxis according to their searching-start time or when they complete the previ -
+ous searching route without finding a passenger.
+There are four steps to update the properties of road segments within a road network. First, the up-to-date histor -
+ical raw data are used to provide the ground-truth for pickup probability demand predictor training, testing, and 
+evaluation. Once the pickup probability predictor is trained, it will be used to update the future properties of road 
+segments for online learning to avoid recommendation overload. The online module maintains a queue of taxi dri -
+vers searching for the next passenger. In general, the route queries are processed in a first in, first out (FIFO) order. 
+A taxi that starts searching after a drop-off will be pushed to the end of the queue, whereas a taxi that fails to find a 
+passenger after finishing the previous search route will be popped to the head of the queue. The recommender sys -
+tem keeps processing the first request in the queue and constructs its searching network according to its current 
+time t
+0 
+and road segment r
+0
+. Then, the single taxi route recommendation algorithm is implemented to provide the 
+optimal route. A parameter update request will be sent to the offline analyzer to update the taxi supply along the 
+recommended searching route to improve the online recommendation performance by avoiding recommendation 
+overload.
+Figure 3. (Color online) Framework of Sequential Recommender System for Taxi Drivers 
+Liu et al.: Sequential Route Recommendation 
+INFORMS Journal on Computing, 2023, vol. 35, no. 5, pp. 1098–1119, © 2023 INFORMS 1105 
+4. Dynamic Passenger Pickup Probability Prediction
+The pickup probability of each road segment captures how likely a taxi driving through the road segment would 
+find a passenger. It can be affected by the spatial-temporal dynamics of taxi activities and human mobility. Specifi -
+cally, in metropolitan areas such as Beijing, it is frequently observed that demands for taxi services concentrate on 
+hot-spot areas and decrease progressively moving away from these spots. Meanwhile, passengers’ daily mobility 
+clearly shows different patterns, varying from peak to off-peak hours. A precise prediction of pickup probability 
+requires the model to learn taxi activities and human mobility from dynamic graph-structured road network data, 
+which is a challenging task.
+With the recent development of the GCN, some static graph-based networks, such as document citation net -
+works, social networks, and knowledge graphs, have been modeled with promising results (Kipf and Welling 
+2017 ). GCN learns hidden layer representations that encode both the local graph structure and the features of neigh -
+borhood nodes and has been proven to scale linearly in the number of graph edges. To develop a dynamic sequen -
+tial mobile route recommender system, we propose a GCN to model the spatial distribution of taxi demand-supply 
+in a road network as a topological graph. The GCN model, with its topology modeling features, has great potential 
+in modeling the spatial structure required to predict the taxi pickup probability. A prominent one is its ability to 
+model the diffusion of the node states to the neighborhood, which can be considered an abstraction of the demand 
+distribution for taxi services in the road network. On the other hand, a recurrent neural network architecture called 
+LSTM (Hochreiter and Schmidhuber 1997 ) is suitable for modeling the temporal pattern of the pickup probability. 
+LSTM has demonstrated its power in many sequential pattern learning and time series forecasting tasks, such as 
+speech recognition, language translation, and traffic forecasting. LSTM can capture the long-term dependencies 
+between time-series observations and the short-term ones, which resemble the daily and hourly demand patterns 
+for taxi services. Therefore, we propose an integrated framework based on GCN and LSTM, in which the GCN cap -
+tures the spatial dependency of the taxi demand-supply distribution in a road network, and the LSTM captures the 
+temporal dynamics in pickup probability time series.
+Figure 4 provides an example of the graph representation of a road network at time t. The GCN for road segment 
+pickup probability prediction is constructed based on the taxi demand-supply distribution in the road network at 
+time t. On this graph, each road segment is represented by a node featured by the number of vacant taxis v
+r,t 
+and pas -
+senger pickups o
+r,t
+. Each directed arc represents the connection between a pair of road segments. More specifically, 
+the GCN at time t takes the input of X
+t
+∈ R
+N ×d 
+and generates an output of G
+L
+t
+, where N is the number of road segments 
+in the network, d is the number of features considered, and L is the total number of layers for graph convolution. 
+Thus, X
+t 
+consists of d road segment-related features at time t, including the current time period, the number of pickup 
+events, and the number of taxis seeking customers on a road segment within period [t � 1, t). By considering the 
+pickup events and vacant taxis as inputs, the GCN predictor is designed to detect the recommendation overload 
+when a number of taxis rush into a small region, causing a significant decrease of pickup probability. Mathematically, 
+let the adjacency matrix of the road network be A, where A
+ij 
+is a binary variable that equals one if road segments I and 
+j are connected and zero otherwise. The snapshot of the graph convolution on lth layer at time t is formulated as
+˜
+A � A + I
+N
+, ( 3 ) 
+G
+l
+t
+� σ
+�
+˜
+D
+�
+1
+2
+˜
+A
+˜
+D
+�
+1
+2
+G
+l� 1
+t
+Θ
+�
+, ( 4 ) 
+Figure 4. (Color online) Example of GCN Representation of Road Network Activities 
+Liu et al.: Sequential Route Recommendation 
+1106 INFORMS Journal on Computing, 2023, vol. 35, no. 5, pp. 1098–1119, © 2023 INFORMS 
+where I
+N
+∈ R
+N ×N 
+is the identity matrix and 
+˜
+D is the diagonal node degree matrix with each diagonal element 
+˜
+D
+ii 
+counting the number of edges for the corresponding node i. The layer-wise propagation rule in Equation ( 4 ) com -
+putes a hidden layer output G
+l
+t 
+from the last layer output G
+l� 1
+t 
+and enables the model to learn the feature representa -
+tions based on nodes connectivity where the information is propagated along with the neighboring nodes within 
+the graph. The input layer l � 0 is the road segment-related features (G
+0
+t
+� X
+t
+∈ R
+N ×d
+). Θ  is the matrix of parameters 
+to train and σ(·) is the rectified linear activation function which introduces the nonlinearity and improves the train -
+ing efficiency. From Equation ( 4 ), the product of G
+l� 1
+t
+Θ  introduces a linear transformation for road segment fea -
+tures, whereas the further product with normalized adjacent matrix 
+˜
+D
+�
+1
+2
+˜
+A
+˜
+D
+�
+1
+2 
+aggregates the transformed road 
+segment features with its neighborhood. As a result, the output of GCN encodes the information of a road segment 
+with a local neighborhood, including the intensity of taxi activities, the passengers’ demand for taxi services, and 
+the pickup probability in the road network during each time period.
+Next, to capture the temporal dynamics of the road segment features into the pickup probability prediction, we 
+integrate GCNs of different time periods into an LSTM sequence. Figure 5 shows the integrated GCN-LSTM model 
+to predict the pickup probability at time T. As seen, the LSTM network models the temporal factors on taxi pickup 
+probability by constructing two time series, hourly series and daily series, which, respectively, capture the short- 
+term and long-term temporal effects. More specifically, to predict the pickup probability at time T, the LSTM takes 
+the hourly series inputs < m
+T� 1
+, m
+T � 2
+, : : : , m
+T � 1
+> and the daily series inputs < m
+T � 24
+, m
+T � 24 ×2
+, : : : , m
+T � 24 ×q
+>, where 
+p and q are the time windows for the two series, respectively, and each input m
+t 
+is the concatenation of the context 
+information C
+t 
+and the output of GCN layer G
+L
+t
+. Here, C
+t 
+is the weather conditions at period t including the temper -
+ature, precipitation, wind, humidity, dew point, pressure, UV index, and visibility.
+Mathematically, the LSTM network can be expressed as follows:
+m
+t
+� (C
+t
+� ve c to ri ze (G
+L
+t
+)), (5 ) 
+f
+l
+t
+� δ(W
+l
+f
+m
+t
++ U
+l
+f
+h
+l
+t� 1
++ b
+l
+f
+), (6 ) 
+i
+l
+t
+� δ(W
+l
+i
+m
+t
++ U
+l
+i
+h
+l
+t� 1
++ b
+l
+i
+), (7 ) 
+o
+l
+t
+� δ(W
+l
+o
+m
+t
++ U
+l
+o
+h
+l
+t� 1
++ b
+l
+o
+), (8 ) 
+˜c
+l
+t
+� t an h(W
+l
+c
+µ
+t
++ U
+l
+c
+h
+l
+t� 1
++ b
+l
+c
+), (9 ) 
+c
+l
+t
+� f
+l
+t
+◦ c
+l
+t� 1
++ i
+l
+t
+◦ ˜c
+l
+t
+, (1 0) 
+h
+l
+t
+� o
+l
+t
+◦ t an h(c
+l
+t
+), (1 1) 
+where h
+l
+t� 1 
+is the hidden state of last time step, δ(·) is the sigmoid function, and W, U, and b are parameters to train. 
+Each LSTM cell has three gates: forget gate f
+l
+t
+, input gate i
+l
+t
+, and output gate o
+l
+t
+. The forget gate f
+l
+t 
+controls how much 
+information of cell state of last time step c
+l
+t� 1 
+will be added into current cell state c
+l
+t
+; the input gate i
+l
+t 
+controls how 
+much information of current cell input activation ˜c
+l
+t 
+will be added into current cell state c
+l
+t
+; and output gate o
+l
+t 
+Figure 5. (Color online) GCN-LSTM Model for Road Segment Pickup Probability Forecasting 
+Liu et al.: Sequential Route Recommendation 
+INFORMS Journal on Computing, 2023, vol. 35, no. 5, pp. 1098–1119, © 2023 INFORMS 1107 
+controls how much information of current cell state c
+l
+t 
+is used for calculating current hidden state h
+l
+t
+. Finally, the 
+concatenation of h
+T � 1
+� h
+T� 24 
+is fed into the fully connected layer as regression to predict the pickup probability 
+p
+T
+∈ R
+N 
+at time T.
+In summary, the GCN-LSTM predictor builds a nonlinear relationship between the inputs and the output, in the 
+form of p
+T
+� G CN- LS TM(f
+1
+, f
+2
+, : : : , f
+D
+), where f
+1
+, f
+2
+, : : : , f
+D 
+are the taxi demand-supply distribution related features 
+and meteorology factors. Each training sample contains the known historical pickup probability. The taxi supply 
+information has two parts: the observed historical vacant taxi traces up to the recommendation time t
+0
+, and the 
+scheduled vacant taxi searching route. We construct these two kinds of taxi supply information into our demand- 
+supply feature set to avoid recommendation overload. As a result, the predictor can proactively detect taxi oversup -
+ply by predicting a decreased pickup probability and guide the taxis to an undersupplied region via recommended 
+routing. To illustrate this point, we simulate a scenario of taxi oversupply using the GCN-LSTM by increasing the 
+number of vacant taxis from 8 to 40 on one road segment while keeping other parameters fixed at their average 
+values. Figure 6 presents the fitting result of the pickup probability as a function of taxi supply, as well as its resid -
+ual plot. It is seen that the pickup probability drops significantly as the taxi supply increases from 8 to 20. For a 
+sequence of taxis, this road segment may remain in the recommended searching route until the pickup probability 
+drops to a certain level such that future taxis only expect a small expected profit due to a reduced pickup probabil -
+ity. As a result, once the predictor can capture taxi oversupply from the historical data, we can leverage the predic -
+tor to avoid recommendation overload.
+5. Sequential Route Recommendation
+With the GCN-LSTM pickup probability predictor, the sequential route recommender system can be developed to 
+sequentially optimize the searching route for vacant taxis in search of their next passenger. The sequential recom -
+mendation follows the FIFO rule, and the searching route is recommended to the taxi driver as soon as the query 
+emerges. In this section, we first propose a recursive route searching strategy for a single taxi and then present the 
+sequential route recommendation for a sequence of vacant taxis.
+5.1. Recursive Route Searching Algorithm
+Upon receiving a taxi’s route query submitted on road segment r
+0 
+at time t
+0
+, the system collects the observed pickup 
+events, observed passing-by events, and scheduled searching routes of nearby taxis, and then determines the best 
+searching strategy (either route searching s or virtual station waiting w) and the corresponding driving route. The 
+Figure 6. (Color online) Simulation-Based Sensitivity Analysis 
+Liu et al.: Sequential Route Recommendation 
+1108 INFORMS Journal on Computing, 2023, vol. 35, no. 5, pp. 1098–1119, © 2023 INFORMS 
+system response time should be within seconds to provide a real-time recommendation to the driver. However, the 
+number of route candidates increases exponentially as the number of road segments considered increases. To 
+address the computational challenge, we propose a recursive route searching algorithm based on a recursion tree 
+structure that transforms the network searching problem into a recursive searching problem.
+Definition 6 ( Recursion Tree ). A recursion tree Υ
+r
+0 
+is constructed based on the road network, where the searching- 
+start road segment r
+0 
+is the root node. Each node has a set of child nodes representing all connected road segments 
+from this parent node. From node r
+i 
+in the recursion tree Υ
+r
+0
+, another recursion tree Υ
+r
+i 
+is constructed starting from 
+its root node r
+i
+. A branch of the recursion tree will stop growing once the end node reaches the maximum searching 
+time τ.
+Figure 7 shows an example of a recursion tree Υ
+r
+0 
+representing the route searching network shown in Figure 
+1(a) . The searching-start road segment A is the root of the constructed recursion tree. Road segments B, C, and D 
+are directly connected to road segment A and are represented as the child nodes of node A. After searching node 
+A in the first layer, the searching time T
+1
+A
+� t
+A 
+does not reach the time limit τ, so we continue to build the recur -
+sion tree Υ
+B
+, Υ
+C
+, Υ
+D 
+from the child nodes B, C, and D. The recursion tree will stop growing once the searching 
+time reaches the time limit. For example, the total searching time along the route “A-D-E-J” is T
+4
+J
+� T
+3
+E
++ t
+J
+. If T
+4
+J 
+exceeds τ, the branch will then stop growing. The pickup probability at the end node (node J) is discounted by 
+the searching time to represent a partial visit to this road segment (see G
+∗
+(J ) in Figure 7 ). The recursion tree 
+enables a recursive searching strategy. That is, the problem of searching for the optimal route from the recursion 
+tree Υ
+A 
+can be converted to the problem of finding the optimal routes from Υ
+B
+, Υ
+C
+, Υ
+D
+.
+Given the estimated pickup probabilities and earnings on road segments, the recursive tree search returns the 
+optimal route that maximizes the expected profit along the route as specified by Equation ( 1 ). In fact, the recur -
+sive tree search can be formulated under the dynamic programming framework. To this end, denote G
+∗
+(r) as the 
+maximum expected profit for a (partial) route starting at any node (road segment) r until the end of any valid 
+searching route. From Definition 1 , A
+r 
+is the adjacent segments connected to segment r, where A
+r
+� ∅ if the 
+searching time reaches τ  at segment r. Then, we have
+G
+∗
+(r) � p
+r
+e
+r
++ (1 � p
+r
+) ma x
+r
+′
+∈A
+r
+G
+∗
+(r
+′
+), (12 ) 
+where the first term on the right-hand side is the expected profit on road r, and the second term is the best possible 
+profit given a pickup does not happen on road r. It is seen that Equation ( 12 ) is the well-known Bellman’s equation. 
+Thus, the recursive tree search conforms to the principle of optimality, and returns the optimal searching route. 
+Correspondingly, the recursive route searching algorithm (RRS) for a single taxi is presented in Algorithm 1 . The 
+RRS algorithm searches the optimal route from a constructed recursion tree Υ
+r
+0
+. It takes the road segment pickup 
+possibility distribution and potential earning on the segment as an input and returns the optimal route R
+∗
+associ -
+ated with a maximum expected profit G
+s
+(R
+∗
+; r
+0
+, t
+0
+) � G
+∗
+(r
+0
+). The RRS algorithm stops when it reaches the end node 
+level and returns the end node with the maximum profit. Step 5 in Algorithm 1 recursively implements the RRS 
+algorithm starting from the next node until the stopping criteria are satisfied.
+Algorithm 1 ( RRS( r
+0
+, Υ
+r
+0
+) )
+Input: a constructed recursion tree Υ
+r
+0 
+with depth n and starting segment r
+0
+;
+Output: optimal searching route R
+∗
+(r
+0
+) and expected profit G
+∗
+(r
+0
+);
+Initialize: pickup probability and earnings {p
+r
+, e
+r
+| r ∈ Υ
+r
+0
+}
+1: if n � 1 do
+Figure 7. (Color online) Recursion Tree Representation of a Route Network 
+Liu et al.: Sequential Route Recommendation 
+INFORMS Journal on Computing, 2023, vol. 35, no. 5, pp. 1098–1119, © 2023 INFORMS 1109 
+2: R
+∗
+(r
+0
+) �< r
+0
+> , G
+∗
+(r
+0
+) � p
+r
+0
+e
+r
+0
+3: else
+4: for each r
+i
+∈ A
+r
+0 
+do
+5: R
+∗
+(r
+i
+), G
+∗
+(r
+i
+) �RRS(r
+i
+, Υ
+r
+i
+);
+6: r
+i
+∗ � ar g ma x
+r
+i
+∈A
+r
+0
+G
+∗
+(r
+i
+)
+7: R
+∗
+(r
+0
+) �< r
+0
+, R
+∗
+(r
+i
+∗ ) > , G
+∗
+(r
+0
+) � p
+r
+0
+e
+r
+0
++ (1 � p
+r
+0
+)G
+∗
+(r
+i
+∗ )
+8: return R
+∗
+(r
+0
+), G
+∗
+(r
+0
+)
+Figure 7 provides an example of how the RRS algorithm works. Suppose we are on road segment A as shown in 
+Figure 1(a) . To find the optimal route from A with the maximum expected profit G
+∗
+(A), according to Equation ( 12 ), 
+the solution depends on the optimal routes starting from A’s neighbors B, C, and D, which recursively depend on 
+the optimal route starting from the neighbors of B, C, and D. The process continues until reaching the end nodes, 
+where the searching time limit is met.
+Given a fully grown recursion tree Υ  of depth n, where for any r ∈ Υ  and | A
+r
+| ≤ N , the complexity of RSS algo -
+rithm is O(N
+n� 1
+). Assuming that the computational cost of searching a recursion tree of depth n is T(n), obviously, 
+we have T (n) ≤ N × T (n � 1) + N . The computational cost of comparing the end nodes is T (1) ≤ N . Meanwhile, after 
+computing recursively n � 1 times, we have T (n) ≤ N
+M� 1
+× T (1) +
+N
+M� 1
+N � 1
+. Therefore, the computational complexity of 
+searching the optimal route is O(N
+n� 1
+).
+Considering the search for optimal routes starting from multiple roads simultaneously, the algorithm may 
+become more effective. In the example shown in Figure 7 , after the optimal route from A with the maximum profit 
+G
+∗
+(A) is found, the intermediate optimal routes starting from A’s neighbors, such as G
+∗
+(B), G
+∗
+(C), G
+∗
+(D), have been 
+identified and calculated. These intermediate results can further be exploited for searching optimal routes starting 
+from B, C, and D’s neighbors, which reduces the time cost. In general, suppose we have a road network, and on 
+each road, there is a taxi waiting for the recommended route. Here, we estimate the computational cost of the recur -
+sive searching algorithm in terms of the length n of a recursive tree. Initially, we have the expected profit G(r; 0) for 
+each road, where zero represents the length of the route (the number of roads in the route except the one where the 
+taxi currently locates). Next, Equation ( 12 ) can be exploited to find optimal routes with length 1 that gives G(r; 1), 
+the time cost for this step is O(MN ), where M :� m ax
+r
+| A
+r
+| (<< N ) and N is the number of roads in the network. Fur -
+thermore, based on G(r; 1) given in the last step and Equation ( 12 ), the optimal routes with length 2 from all roads 
+with expected profit G(r; 2) can be found with time cost O(MN ), the process continues until the optimal route of 
+length n is found. The computational complexity for multiple requests is O(nM N ). As the computational complex -
+ity grows with the increase of the number of road segments n, a larger searching time limit τ  indicates a higher com -
+putational cost due to a deeper recursion tree.
+5.2. Sequential Route Recommendation
+The recursive route searching algorithm can provide an optimal searching route for a single taxi. However, in 
+real-world practices, taxis may arrive in a sequence, and the road condition, such as taxi supply, will change 
+dynamically. For a newly emerged query, the route recommender system should consider previously scheduled 
+taxis currently searching around to avoid recommendation overload. Hence, we provide a sequential RRS (SRRS) 
+by integrating the dynamic pickup probability predictor and the recursive route searching algorithm for a 
+sequence of vacant taxis.
+Algorithm 2 shows the SRRS workflow. Upon receiving a query from a vacant taxi, we take a snapshot of the 
+road network conditions and update the road network conditions, including road segment driving speed, recom -
+mended driving routes of previous vacant taxis, taxi passing-by and pickup events within the previous 60 minutes. 
+Then, for the sequence of vacant taxis, in Step 3, we pop the head taxi i with its searching-start time t
+i 
+and current 
+location on road segment r
+i
+. In Steps 4 and 5, the pickup probabilities of the road segments within the recursion tree 
+Υ
+r
+i 
+are recalculated, from which the optimal route is selected using the recursive route searching algorithm. The 
+LSTM predictor can reflect the impact of short-term demand and supply on the pickup probabilities. Meanwhile, 
+the optimal virtual station v
+∗
+i 
+and its fastest driving route connecting r
+i 
+and v
+∗
+i 
+are found in Steps 6 and 7. Steps 8 and 
+9 provide the optimal searching route by comparing the expected profit for the route searching strategy G
+s∗
+i 
+and for 
+the virtual station waiting strategy G
+w∗
+i
+. After we provide the optimal driving route for taxi i, the taxi supply along 
+the route is added by one and we go back to Step 1 to serve the (i + 1)th taxi in the queue.
+By considering the previously recommended vacant taxis, the dynamic pickup probability predictor can auto -
+matically capture the potential taxi oversupply by updating the pickup probability. Therefore, the searching routes 
+of the queued taxis can vary from those of the scheduled vacant taxis to avoid recommendation overload.
+Liu et al.: Sequential Route Recommendation 
+1110 INFORMS Journal on Computing, 2023, vol. 35, no. 5, pp. 1098–1119, © 2023 INFORMS 
+Algorithm 2 ( SRRS (C ))
+Input: C : a sequence of vacant taxis to be served;
+Output: {R
+∗
+i
+| ∀ i ∈ C }: optimal searching routes; 
+1: Pop Taxi i ∈ C at query time t
+i 
+and query segment r
+i
+;
+2: Construct recursion tree Υ
+r
+i 
+according to the current searching-start segment r
+i 
+and searching time limit τ;
+3: Update road network parameters (v
+r , t
+i
+, o
+r , t
+i
+, t
+r
+) for all r ∈ G;
+4: Predict pickup probability P
+r 
+for all r ∈ Υ
+r
+i
+;
+5: Find the optimal searching route: R
+s∗
+i
+, G
+s∗
+i
+�RRS(r
+i
+, Υ
+r
+i
+);
+6: Find the optimal virtual station and the fastest driving route:
+7: v
+∗
+i
+, R
+w∗
+i
+� ar g m ax
+v∈V , R∈S
+r
+i
+1
+T
+R
++T
+v
+e
+v
+;
+8: Recommend the optimal searching route from searching or waiting strategy:
+9: R
+∗
+i
+� ar g m ax
+R
+∗
+i
+∈{R
+s∗
+i
+, R
+w∗
+i
+}
+1
+P
+r∈R
+s∗
+i
+t
+r
+G
+s∗
+i
+,
+1
+T
+R
+w∗
+i
++T
+v
+∗
+i
+e
+v
+∗
+i
+( )
+10: Update taxi supply along route R
+∗
+i
+;
+11: Go to Step 1 to recommend the searching route for the next vacant taxi;
+6. Numerical Experiments and Discussions
+In this section, we demonstrate the efficiency and effectiveness of the proposed sequential route recommender sys -
+tem with extensive experiments using the Beijing Taxi data. All experiments were conducted on a server with 2X 
+10-core Intel Xeon Gold 5215 Processor, 1 TB RAM, and 10X 2080Ti GPUs. The Python scripts for all numerical 
+experiments presented in this section can be found at the GitHub site of this paper (Liu et al. 2023 ).
+6.1. Road Segment Pickup Probability Prediction
+6.1.1. Baselines and Evaluation Metrics. The optimal hyperparameters of the proposed GCN-LSTM model are 
+found through random searching (Bergstra and Bengio 2012 ). Specifically, we use one layer of graph convolution 
+with dimension 32 and one layer of LSTM with dimension 16. The learning rate is 0.01, and the batch size is 8. To 
+validate the effectiveness of the pickup probability predictor, the following baseline methods are selected for per -
+formance comparison: 
+1. Classic Regressors. The random forest (RF) (Breiman 2001 ) and gradient boosting trees (GBT) (Friedman 
+2002 ), two ensemble models for machine learning tasks, are used as classic baselines. They have been proven to be 
+robust and effective but cannot deal with temporal and topological data by design (Maclin and Opitz 1997 ).
+2. Autoregressive Models. The ARIMA and ARIMA with exogenous (ARIMA-X), two autoregressive models 
+(Box et al. 2015 ), are used as linear autoregressive baselines. These two methods mainly focus on discovering tem -
+poral patterns from historical data.
+3. Nonlinear Autoregressors. The nonlinear autoregressive network with exogenous inputs (NARX) and LSTM 
+(Hochreiter and Schmidhuber 1997 ) have the ability to process the sequential data by modeling a nonlinear rela -
+tionship between the time series values and exogenous variables.
+4. GNN-based Methods. The MTGNN (Wu et al. 2020b ) and GaAN (Zhang et al. 2018 ), two methods designed 
+for traffic speed prediction, have the ability to learn spatiotemporal dynamics of road networks.
+5. Benchmark Models. The historical average method from Qu et al. ( 2014 ) and the deep LSTM from Yu et al. 
+( 2017 ) are two latest benchmark models for the taxi recommendation in the literature.
+The prediction accuracy is measured on an hourly basis using the mean absolute error (MAE) metric, which mea -
+sures the absolute error of pickup probability prediction. Furthermore, we calculate the weighted average of the 
+MAE (wMAE), weighted by the total number of trips during each time slot (denoted as W(t)):
+MA E(t) �
+1
+N
+1
+E
+X
+N
+i�1
+X
+E
+e�1
+| ˆp
+e
+i
+(t) � p
+e
+i
+(t) | , wM AE(t) �
+P
+24
+t�1
+W (t)M AE(t)
+P
+24
+t�1
+W (t)
+, 
+where ˆp
+e
+i
+(t) represents the predicted pickup probability of segment i during tth time slot on the eth testing day. 
+From the seven-day data set, we used the first four days as the training set and the remaining three days as the test -
+ing set. The evaluation follows the rolling forecasting for next-time-slot prediction. That is, after we predict the 
+next-time-slot pickup probability, the data are included in our training set and the model is updated.
+6.1.2. Experimental Results. We assess the performance of the proposed GCN-LSTM model by comparing it with 
+the baselines using the same training and testing data set. Table 3 summarizes the performance comparison in 
+Liu et al.: Sequential Route Recommendation 
+INFORMS Journal on Computing, 2023, vol. 35, no. 5, pp. 1098–1119, © 2023 INFORMS 1111 
+terms of wMAE defined previously. To test the robustness of the methods, we design four testing categories by 
+computing wMAE over different time periods, including full day (24 hours), morning peak hours, afternoon non -
+peak hours, and evening peak hours. As seen, the proposed GCN-LSTM model achieves the lowest wMAE com -
+pared with all baselines across four testing categories. It shows the superiority of the proposed GCN-LSTM model 
+compared with baselines and the robustness of its performance. The performance comparison between different 
+methods also offer justifications on why the proposed GCN-LSTM model is superior by design. 
+• The autoregression methods outperform the ensemble methods, which indicates the importance of time 
+dependencies in predicting pickup probabilities and justifies the inclusion of LSTM in the proposed model.
+• The proposed GCN-LSTM model outperforms LSTM, ARIMA-X, and deep LSTM methods, indicating that 
+GCN can better capture the taxi activities using a network structure. The importance of graph modeling in predict -
+ing pickup probabilities is further verified by the good performance of other GNN-based models, such as MTGNN 
+and GaAN.
+• The proposed GCN-LSTM model outperforms MTGNN in all four testing categories. This shows the main dif -
+ference in model design that MTGNN tries to learn the graph adjacency matrix based on time series data, requiring 
+extremely long time series (around 10,000) to achieve its optimal performance. In our data set, the length of time 
+series is at hundreds level, which does not support a good training of the MTGNN model. Meanwhile, the shorter 
+time series also impact the graph convolution performance of MTGNN because it does not explicitly model the 
+short-term and long-term impact as our framework.
+• Compared with the GaAN model, the proposed GCN-LSTM model benefits from the choice of the LSTM unit, 
+which provides better temporal dynamics modeling of a sequence of graph convolution networks.
+Finally, we compare the computational efficiency of the proposed GCN-LSTM model with benchmark models, 
+measured by the training time and execution time of the models. Specifically, the training time includes the compu -
+tational time for formatting training data and model training until convergence, and the execution time includes 
+the computational time for formatting input data and making predictions. As some baseline algorithms do not sup -
+port GPU acceleration, the traditional machine learning methods and autoregressive methods were computed in 
+the CPU environment and the deep learning methods were computed using GPU. The computational efficiency 
+comparison is reported in the last column of Table 3 . It is seen that the proposed GCN-LSTM model can be trained 
+in 305 seconds, indicating that the offline road network analysis can be conducted with the newly observed data at 
+a high frequency of every five minutes. A well-trained GCN-LSTM model can update the distribution of pickup 
+probability in the searching area in 13 sets, which is applicable for the online route recommendation. It takes a 
+much longer time for the MTGNN model to converge, whereas the GaAN and GCN-LSTM models are more effi -
+cient using the traffic network data. Compared with the NARX and LSTM methods that treat road segments inde -
+pendently, the GCN-LSTM method is more efficient by batch learning the model parameters in the network.
+6.2. Effectiveness on Mitigating Recommendation Overload
+During rush hours, a number of taxis may dropoff on the same road segment and then submit queries for the next 
+searching route during the same time period. For example, in the evening rush hours, vacant taxis may start search -
+ing from the residential areas after completing the commuting trips. As a result, we can observe a severe taxi over -
+supply in some regions. Here, we provide a case study to show the effectiveness of our sequential route searching 
+Table 3. Performance Comparison of Different Pickup Probability Predictors
+Class Methodology
+Weighted average MAE (wMAE) Computational time (s)
+24 hours Morning Afternoon Evening Training Execution
+Benchmark Historical mean 0.2237 0.1520 0.1478 0.1692 38a 10
+a
+Deep LSTM 0.1233 0.1069 0.1001 0.1138 1,104
+b
+115
+b
+Ensemble Methods Random forest 0.2208 0.1921 0.1600 0.2179 218
+a
+18
+a
+Gradient boosting 0.2497 0.1581 0.1413 0.1697 469
+a
+33
+a
+Autoregression ARIMA 0.1721 0.1488 0.1308 0.1894 1,328
+a
+105
+a
+ARIMA-X 0.1216 0.1075 0.1003 0.1412 1,609
+a
+161
+a
+Nonlinear Autogression NARX 0.1640 0.1411 0.1398 0.1653 841
+b
+46
+b
+LSTM 0.1588 0.1319 0.1321 0.1601 1,006
+b
+84
+b
+GNN-based Methods MTGNN 0.1184 0.1206 0.1421 0.1278 1,022
+b
+32
+b
+GaAN 0.1205 0.1028 0.1017 0.1112 327
+b
+26
+b
+Proposed method GCN-LSTM 0.1112 0.0913 0.0902 0.1039 305
+b
+13
+b
+a
+Model trained and computed in CPU environment.
+b
+Model trained and computed with GPU acceleration.
+Liu et al.: Sequential Route Recommendation 
+1112 INFORMS Journal on Computing, 2023, vol. 35, no. 5, pp. 1098–1119, © 2023 INFORMS 
+strategy in addressing this issue. In this case study, starting from 5:30 p.m., 50 taxis started searching for the next 
+passenger from the same road segment (indexed 63819) within a five-minute period. The searching depth is fixed to 
+be eight. After the system provides a route recommendation for the ith taxi, the taxi supply and the corresponding 
+pickup probability along this recommended route are immediately updated using the trained GCN-LSTM predic -
+tor to provide a balanced sequential route recommendation.
+We compare the proposed sequential route recommendation with the top K strategy (Qu et al. 2014 ), the static 
+strategy without considering recommendation overload, and a simple group recommendation. The profit per 
+minute of searching time is used to evaluate the model performance. The top K strategy provides a different route 
+by comparing the route similarities with the scheduled routes, while the static strategy does not consider recom -
+mendation overload and the same routes will be recommended. The group-five strategy provides an intuitive batch 
+recommendation for every group of five queries. The top five most profitable routes will be recommended to a 
+group of five taxis. The expected profit is estimated after a batch recommendation is made, and then the distribu -
+tion of pickup probability is updated.
+Figure 8(a) shows the average profit for K scheduled taxis; that is, after we provide route recommendations for K 
+taxis, their average profit is used as the evaluation metric. As seen in Figure 8(a) , the average profit decreases as 
+more taxis start searching in the same segment. The sequential route recommendation can provide a balanced rec -
+ommendation for a queue of 50 taxis with an average profit of 0.9003 CNY/minute. The static strategy has a serious 
+recommendation overload issue with an average profit of 0.537 CNY/minute for 50 taxis. The top K strategy selects 
+the recommended routes according to route similarity while neglecting potential profit. The expected profit 
+decreases significantly at the beginning in order to avoid repeating routes, but overall it provides a better solution 
+than the static strategy, with an average profit of 0.6388 CNY/minute for 50 taxis. The group-five strategy with an 
+update frequency of every five queries achieves the second-best performance with an average profit of 0.8202 
+CNY/minute for 50 taxis, which provides an alternative solution to the sequential search strategy that requires an 
+update frequency of once per query.
+Furthermore, Figure 9 presents the top six recommended routes using the proposed method. Specifically, the 
+route in Figure 9(a) is recommended for the first six taxis and the 16th and 26th taxis. After six taxis adopt the first 
+route, it is no longer optimal for the subsequent taxis waiting in the queue. As a result, for taxis 7–9, the route in 
+Figure 9(b) is recommended. Overall, the sequential route recommendation with dynamic pickup probability 
+update can help address the recommendation overload issue when there is an oversupply.
+6.3. Evaluation on Sequential Recommender Systems
+6.3.1. Experimental Setting. To validate the effectiveness of the proposed mobile route recommender system, a 
+total of 108,793 real-world searching route queries during the fifth to seventh days (out of the seven-day data set) 
+within the third ring road circle in Beijing were used as the testing data. Each query record includes the actual 
+searching-start time t
+0
+, searching-start location r
+0
+, actual searching route R
+∗
+r
+0
+, searching time ∆, and earning of this 
+pickup order e. Figure 10(a) presents the searching-start point distribution.
+Figure 8. (Color online) Performance Comparison of Different Routing Strategies for a Balanced Recommendation 
+Notes. (a) Performance comparison. (b) Query response speed test.
+Liu et al.: Sequential Route Recommendation 
+INFORMS Journal on Computing, 2023, vol. 35, no. 5, pp. 1098–1119, © 2023 INFORMS 1113 
+It is not trivial to conduct performance comparisons using the actual data, because we only know what route a 
+taxi driver actually took but not the routes that the taxi could have taken. To establish fair comparisons, we control 
+the taxi demand-supply distribution by counting the number of pickup orders o
+r 
+and the number of vacant taxis v
+r 
+for all road segments in its searching road network r ∈ G
+r
+0
+. Vacant taxis at time t
+0 
+with unfinished searching routes 
+in the next 10 minutes were considered as previously scheduled taxis. The taxi demand-supply distribution is then 
+fed into the GCN-LSTM model to update the pickup probability distribution in this searching road network G
+r
+0
+. To 
+control the searching time, if the actual searching time ∆ is less than τ  (10 minutes in our experiments), we use ∆ as 
+the searching time to make a recommendation. Otherwise, we consider the taxi out-of-service and filter the record.
+For a single query, three metrics are computed for performance comparison: 
+1. Actual Unit Profit (AUP). Each actual taxi query record has the actual earning by taking this actual route. We 
+compute the actual profit per minute made by this actual taxi on this trip as a baseline: G
+∗
+A
+�
+e
+∆
+.
+2. Expected Unit Profit (EUP) of Actual Routes. For each actual route that a taxi took, we compute the expected 
+profit estimated using the predicted pickup probability, as well as the attendant expected profit per minute. Actual 
+routes in the historical data are routes that end up with a successful pickup. Thus, the expected unit profit of actual 
+routes should be smaller than the actual unit profit, since the former metric takes into account the probability that 
+the taxi does not successfully pickup a passenger after finishing the route. Hence, this metric is a fair baseline for 
+our method.
+3. Expected Unit Profit (EUP) of Recommended Routes. Taking the same starting scenario of an actual route, 
+we run the proposed method and compute the expected profit if the taxi takes the route recommended by our 
+Figure 9. (Color online) Route Recommendation for a Queue of Taxis 
+Notes. (a) Recommended route for taxis 1–6, 16, and 26. (b) Recommended route for taxis 7–9, 11, and 28. (c) Recommended route for taxis 10 
+and 22. (d) Recommended route for taxis 12–15 and 29. (e) Recommended route for taxis 17 and 25. (f) Recommended route for taxi 18.
+Liu et al.: Sequential Route Recommendation 
+1114 INFORMS Journal on Computing, 2023, vol. 35, no. 5, pp. 1098–1119, © 2023 INFORMS 
+method, as well as the attendant expected unit profit. This metric represents the expected unit profit when the taxis 
+take the routes recommended by the proposed method.
+In addition, we test the proposed algorithm when using the minimum searching time (MST) and minimum 
+searching distance (MSD) (Xiao et al. 2020 ) objectives, by replacing the earning e
+r 
+on road segment r with driving 
+time T
+r 
+and distance L
+r
+, respectively. Their objective functions are formulated as follows:
+G
+M ST
+(R; r
+0
+, t
+0
+) � p
+r
+0
+T
+r
+0
++
+X
+n
+i�1
+Y
+i� 1
+j�0
+(1 � p
+r
+j
+)p
+r
+i
+T
+r
+i
+, (1 3) 
+G
+M SD
+(R; r
+0
+, t
+0
+) � p
+r
+0
+L
+r
+0
++
+X
+n
+i�1
+Y
+i� 1
+j�0
+(1 � p
+r
+j
+)p
+r
+i
+L
+r
+i
+: (1 4) 
+The expected profit of the optimal routes with minimum searching time and minimum searching distance are then 
+calculated as two baselines.
+Finally, we test the proposed method and the two alternative methods using MST and MSD objectives under 
+both static and dynamic modes. The dynamic mode means we dynamically update the pickup probability predic -
+tions when making sequential recommendations, while the static mode means we use the fixed historical average 
+pickup probability without dynamic updates and make sequential recommendation using the strategy proposed 
+by Qu et al. ( 2014 ).
+6.3.2. Experimental Results. Figure 10(b) presents the histogram of performance comparison between our pro -
+posed cost-effective sequential route recommender system (C-SRR) and the AUP, where the x axis is the difference 
+between the profits of the recommended results and the taxi drivers’ actual profits. It is seen that the profit of our 
+recommended routes outperforms the profit of the actual routes chosen by the taxi drivers.
+We then compute the three performance metrics under different benchmarks introduced previously. Table 4
+summarizes the performance comparisons. It is seen that the expected unit profit of taking actual routes is 2.896 
+CNY/minute, which is lower than the actual unit profit 3.174 CNY/minute, because the latter only computes 
+routes ending up with a successful pickup. In comparison, the expected unit profit of taking routes recommended 
+by the proposed C-SRR strategy with dynamic pickup probability update can achieve an expected unit profit of 
+3.560 CNY/minute, a 22.93% of improvement from the expected unit profit of actual routes. It shows that taking 
+the recommended routes are expected to increase the unit profit of taxi drivers. Although we control the searching 
+time limit of τ  � 10 minutes, taxi drivers can set a smaller searching time limit if they only care about the short-term 
+expected earnings or want to restart the search earlier if no passenger is found. By setting the searching time limit to 
+τ  � 8 minutes, the EUP of actual routes within 8 minutes is 3.374 CNY/minute. Taking these real searching events 
+with their actual searching time and searching-start road segments, the C-SRR strategy can provide a EUP of recom -
+mended routes of 3.863 CNY/minute, a 14.49% improvement from the EUP of actual routes.
+Figure 10. (Color online) Experiment of Sequential Route Recommendation for Vacant Taxis 
+Notes. (a) Vacant taxi query distribution. (b) Profit difference between SRRS and the benchmark model.
+Liu et al.: Sequential Route Recommendation 
+INFORMS Journal on Computing, 2023, vol. 35, no. 5, pp. 1098–1119, © 2023 INFORMS 1115 
+Furthermore, the performance comparison between the static and dynamic models indicates that we can achieve a 
+higher expected profit by considering the real-time recommendation overload (dynamic updates of pickup probabil -
+ity prediction). It is worth noticing that static strategies can have worse performance than taking the actual taxi routes, 
+indicating experienced taxi drivers may have the knowledge to avoid oversupplied regions. Even using the objectives 
+of MST and MSD, adopting the dynamic pickup probability predictor could have increased the expected unit profit 
+by 14.88% and 27.92%, respectively. The minimum searching distance strategy (using the MSD objective) outperforms 
+by the minimum searching time strategy (using the MSD objective), because the latter ignores traffic congestion that 
+may cause a long searching time and a low earning per minute. Both strategies are worse than the proposed method 
+using the objective in Equation ( 1 ), indicating that the C-SRR is more profitable for taxi drivers by selecting road seg -
+ments with higher earnings per trip. It is also important to note that, the minimum searching time strategy can be 
+more profitable for on-demand drivers such as Uber or DiDi drivers who take cash bonuses by finishing more orders.
+6.3.3. Efficiency Test. Finally, to evaluate the computing efficiency of the proposed C-SRR system, we use the case 
+described in Section 6.2 when there is a taxi oversupply and the case of a three-day system implementation for real- 
+world queries. Because the depth of the recursion tree affects the computing efficiency the most, we measure the 
+query response time by varying the tree depth from 5 to 12 (roughly equivalent to 5 to 18 minutes of searching time 
+limit τ). The result of the query response times is presented in Figure 8(b) . The bottom line shows the query 
+response time for a queue of taxis starting searching on the same road network, with the bar on each data point 
+representing the standard deviation. The computational time for the recursion tree construction is excluded and the 
+response time indicates the efficiency of route optimization. It can be seen that the recursive searching algorithm is 
+efficient and the response time is less than 1 second if the searching depth is no more than nine segments. However, 
+the computational time increases exponentially with search depth and the response time can go up to 10 seconds 
+when the search depth reaches 12. The upper line in Figure 8(b) presents the response time of a three-day imple -
+mentation. The response time increases as the search depth increases, but the query response for a search depth of 8 
+is less than 1.1 seconds, which is acceptable for a real-time online recommender system.
+6.4. Active Region of Virtual Stations
+Sometimes, waiting in a virtual station can be more profitable than searching along a route, especially when the cur -
+rent searching-start segment of a taxi is near such a virtual station. On the one hand, if the current location is far 
+away from any virtual stations, the taxi will waste gas and time driving to a virtual station, resulting in a low net 
+profit per minute. In those cases, the waiting strategy is inferior to the route searching strategy. On the other hand, 
+during certain time periods and when the searching-start segments are within certain regions, the waiting strategy 
+could be superior to the route searching strategy. The set of searching-start segments R
+w 
+and time periods T
+w 
+pre -
+ferred for adopting the waiting strategy are discovered as so-called active regions and active time zone of virtual 
+stations. We extract the recommendation results for the seventh day to find out whether a searching-start query is 
+responded to with a virtual station instead of a searching route in the next 10 minutes. If there is at least one query 
+recommended with a virtual station, we label this searching-start road segment as an active waiting segment. The 
+searching-start segments recommended with the same virtual station form an active waiting region. Figure 11 pre -
+sents the active waiting region of virtual stations during three different time periods, with the color representing 
+the regions of different virtual stations. As seen, the virtual stations and active regions change during the day. Fur -
+ther, most of the active virtual stations are actual taxi stands or are located near hospitals, museums, hotels, schools, 
+and sports centers in Beijing.
+7. Concluding Remarks
+This paper proposes a cost-effective recommender system for taxi drivers to maximize their profits by providing prof -
+itable searching routes that avoid recommendation overload. Specifically, we integrate a recursive route searching 
+Table 4. Profit Comparison of Different Recommendation Strategies in CNY per Minute
+Prediction model
+AUP of 
+actual routes
+EUP of 
+actual routes
+EUP of 
+recommended 
+routes (MST)
+EUP of 
+recommended 
+routes (MSD)
+EUP of 
+recommended 
+routes (C-SRR)
+Static model 3.174 2.896 2.903 2.518 3.107
+Dynamic model 3.335 3.221 3.560
+Notes. The bold number indicates the largest number in this table for performance comparison. It is obtained by the C- 
+SRR strategy in a dynamic model.
+Liu et al.: Sequential Route Recommendation 
+1116 INFORMS Journal on Computing, 2023, vol. 35, no. 5, pp. 1098–1119, © 2023 INFORMS 
+strategy with a segment-level pickup probability predictor based on the GCN-LSTM model. GCN is designed to cap -
+ture taxi demand-supply distribution as a topological structure in a road network, and the LSTM model is designed 
+to model the temporal dynamics of the road network. Based on a timely and precise prediction of pickup probabili -
+ties, the recommender system can achieve the balance of demand-and-supply mobility and avoid recommendation 
+overload. To improve the computational efficiency of route optimization, we further propose a recursive route search -
+ing algorithm to support the real-time recommender system for a sequence of taxi drivers. The algorithm takes the 
+prediction result as an input to estimate and compare the potential profits of candidate routes, significantly reducing 
+the size of route searching space. In addition, the algorithm parameters are updated dynamically according to the pre -
+viously scheduled driving routes to avoid recommendation overload. The route searching strategy is then compared 
+with the waiting strategy by discovering profitable virtual stations, incentivized by experienced taxi drivers who pre -
+fer waiting for passengers at hot spots. Our data have shown that such virtual stations change over time during the 
+day. Finally, we conduct extensive experiments on real-world data sets collected from Beijing and the experimental 
+results clearly validate the effectiveness of the proposed recommender system.
+This paper can be extended in several future directions. The proposed recommender system considers the 
+expected earnings of the next pickup for a single taxi driver searching in a localized region. The localized sequential 
+search follows the first-come-first-serve policy that responds to route queries reactively. It would be beneficial to 
+design a multistep long-term taxi demand predictor to proactively guide taxis to the regions with high taxi demand 
+if the nearby road network has a very low pickup probability during off-peak hours. In addition, the batch recom -
+mendation can be an alternative strategy to the sequential search during peak hours. The batch recommendation 
+seeks a global earning for a group of taxis but requires drivers to wait for a batch of route queries from this group. 
+When the group of queries emerges in a very short period of time in the same region during peak hours, the batch 
+Figure 11. (Color online) Active Regions of Virtual Stations During Different Time Periods 
+Notes. (a) Base map. (b) Active regions, 8–11 a.m. (c) Active regions, 1–3 p.m. (d) Active regions, 5–8 p.m.
+Liu et al.: Sequential Route Recommendation 
+INFORMS Journal on Computing, 2023, vol. 35, no. 5, pp. 1098–1119, © 2023 INFORMS 1117 
+recommendation may provide a good solution without a high query response latency. A globally optimal solution 
+may be possible if the pickup probability predictor can be integrated into an optimization model for group route 
+assignment. Furthermore, in our study, the influence of a recommendation on future demand distribution can be 
+fully captured in the consequent queries. It would be desirable to address the potential concurrency issue that 
+many taxi drivers are sharing and updating information in the same search network within a short period of time. 
+The concurrency control problem can be exacerbated in a distributed database system where the traffic data are 
+usually stored. As a future study, we can impose concurrency control solutions in a distributed database system to 
+further improve the computational efficiency and effectiveness of the route recommender systems.
+The proposed sequential route recommendation methods can also be generalized to facilitate the development of 
+other mobile recommender systems. Although the proposed system is developed to provide street-hail services, 
+the combination of a GCN-LSTM predictor and recursive route recommendation algorithm can help improve the 
+work efficiency of the on-demand ride-hailing systems (Alonso-Mora et al. 2017 , Braverman et al. 2019 ) by recom -
+mending vacant sharing cars to drive to the road segments with a high probability of sharing orders and high earn -
+ings. Because the external information, such as prices, may affect the demand-supply distribution in the 
+on-demand system, the proposed GCN-LSTM predictor can be further extended to help solve the pricing optimiza -
+tion problems (Bimpikis et al. 2019 , Yang et al. 2020 ). The sequential route recommendation system can also benefit 
+crowdsourced delivery services (Alnaggar et al. 2021 ) by recommending driving and delivering routes for new 
+orders while avoiding the competition of delivery agents in the same region.
+References
+Alnaggar A, Gzara F, Bookbinder JH (2021) Crowdsourced delivery: A review of platforms and academic literature. Omega 98:102139.
+Alonso-Mora J, Samaranayake S, Wallar A, Frazzoli E, Rus D (2017) On-demand high-capacity ride-sharing via dynamic trip-vehicle assign -
+ment. Proc. National Acad. Sci. USA 114(3):462–467.
+Bergstra J, Bengio Y (2012) Random search for hyper-parameter optimization. J. Machine Learn. Res. 13(Feb):281–305.
+Bimpikis K, Candogan O, Saban D (2019) Spatial pricing in ride-sharing networks. Oper. Res. 67(3):744–769.
+Box GE, Jenkins GM, Reinsel GC, Ljung GM (2015) Time Series Analysis: Forecasting and Control (John Wiley & Sons, Hoboken, NJ).
+Braverman A, Dai JG, Liu X, Ying L (2019) Empty-car routing in ridesharing systems. Oper. Res. 67(5):1437–1452.
+Breiman L (2001) Random forests. Machine Learn. 45(1):5–32.
+Chai D, Wang L, Yang Q (2018) Bike flow prediction with multi-graph convolutional networks. Proc. 26th ACM SIGSPATIAL Internat. Conf. on 
+Adv. in Geographic Inform. Systems (Association for Computing Machinery, New York), 397–400.
+Chang H, Tai Y, Hsu JY (2010) Context-aware taxi demand hotspots prediction. Internat. J. Bus. Intelligence Data Mining 5(1):3–18.
+Du B, Zhou W, Liu C, Cui Y, Xiong H (2019) Transit pattern detection using tensor factorization. INFORMS J. Comput. 31(2):193–206.
+Du B, Hu X, Sun L, Liu J, Qiao Y, Lv W (2020) Traffic demand prediction based on dynamic transition convolutional neural network. IEEE 
+Trans. Intelligent Transportation Systems 22(2):1237–1247.
+Fan W, Ma Y, Li Q, He Y, Zhao E, Tang J, Yin D (2019) Graph neural networks for social recommendation. Proc. World Wide Web Conf., 417–426.
+Feng G, Kong G, Wang Z (2020) We are on the way: Analysis of on-demand ride-hailing systems. Manufacturing Service Oper. Management. 
+23(5):1237–1256.
+Friedman JH (2002) Stochastic gradient boosting. Comput. Statist. Data Anal. 38(4):367–378.
+Garg N, Ranu S (2018) Route recommendations for idle taxi drivers: Find me the shortest route to a customer! Proc. 24th ACM SIGKDD Inter -
+nat. Conf. Knowledge Discovery Data Mining (ACM, New York), 1425–1434.
+Ge Y, Li H, Tuzhilin A (2021) Route recommendations for intelligent transportation services. IEEE Trans. Knowledge Data Engrg. 33(3):1169–1182.
+Ge Y, Xiong H, Tuzhilin A, Liu Q (2014) Cost-aware collaborative filtering for travel tour recommendations. ACM Trans. Inform. Systems 32(1):1–31.
+Ge Y, Xiong H, Tuzhilin A, Xiao K, Gruteser M, Pazzani M (2010) An energy-efficient mobile recommender system. Proc. 16th ACM SIGKDD 
+Internat. Conf. on Knowledge Discovery and Data Mining (ACM, New York), 899–908.
+Guo S, Lin Y, Feng N, Song C, Wan H (2019) Attention based spatial-temporal graph convolutional networks for traffic flow forecasting. Proc. 
+Conf. AAAI Artificial Intelligence, vol. 33, 922–929.
+Hochmair HH (2016) Spatiotemporal pattern analysis of taxi trips in new york city. Transportation Res. Rec. 2542(1):45–56.
+Hochreiter S, Schmidhuber J (1997) Long short-term memory. Neural Comput. 9(8):1735–1780.
+Hopkins J, Turner J (2012) Go Mobile: Location-Based Marketing, Apps, Mobile Optimized Ad Campaigns, 2D Codes and Other Mobile Strategies to 
+Grow Your Business (John Wiley & Sons, Hoboken, NJ).
+Jiang W, Luo J (2021) Graph neural network for traffic forecasting: A survey. Preprint, submitted January 27; last update February 22, 2022, 
+https:/ /arxiv.org/abs/2101.11174.
+Kipf TN, Welling M (2017) Semi-supervised classification with graph convolutional networks. Preprint, submitted September 9; last update 
+February 22, 2017, https:/ /doi.org/10.48550/arXiv.1609.02907.
+Kong X, Xia F, Wang J, Rahim A, Das SK (2017) Time-location-relationship combined service recommendation based on taxi trajectory data. 
+IEEE Trans. Industrial Inform. 13(3):1202–1212.
+Li J, Zhou W, Chen Z, Gong YJ (2021) Geo-attention network for traffic condition prediction and travel time estimation. Proc. 29th Internat. 
+Conf. on Adv. in Geographic Inform. Systems, 654–657.
+Li X, Pan G, Wu Z, Qi G, Li S, Zhang D, Zhang W, et al. (2012) Prediction of urban human mobility using large-scale taxi traces and its appli -
+cations. Frontiers Comput. Sci. 6(1):111–121.
+Lin L, He Z, Peeta S (2018) Predicting station-level hourly demand in a large-scale bike-sharing network: A graph convolutional neural net -
+work approach. Transportation Res., Part C Emerging Tech. 97:258–276.
+Liu et al.: Sequential Route Recommendation 
+1118 INFORMS Journal on Computing, 2023, vol. 35, no. 5, pp. 1098–1119, © 2023 INFORMS 
+Liu J, Teng M, Weiwei C, Xiong H (2023) A cost-effective sequential route recommender system for taxi drivers. Version 2021.0112. http:/ /dx.doi.org/ 
+10.5281/zenodo.7631739, https:/ /github.com/INFORMSJoC/2021.0112.
+Liu M, Gao H, Ji S (2020) Toward deeper graph neural networks. Proc. 26th ACM SIGKDD Internat. Conf. on Knowledge Discovery & Data Min -
+ing (ACM, New York), 338–348.
+Ma T, Hu Y, Lu Y, Bhattacharyya S (2021) Graph neural network for customer engagement prediction on social media platforms. Proc. 54th 
+Hawaii Internat. Conf. on System Sci., 4158.
+Maclin R, Opitz D (1997) An empirical evaluation of bagging and boosting. Proc. 14th National Conf. Artificial Intelligence and 9th Conf. Innova -
+tive Applications of Artificial Intelligence (AAAI Press, Palo Alto, CA), 546–551.
+Moreira-Matias L, Gama J, Ferreira M, Mendes-Moreira J, Damas L (2013) Predicting taxi-passenger demand using streaming data. IEEE 
+Trans. Intelligent Transportation Systems 14(3):1393–1402.
+Qu B, Yang W, Cui G, Wang X (2020) Profitable taxi travel route recommendation based on big taxi trajectory data. IEEE Trans. Intelligent 
+Transportation Systems. 21(2):653–668.
+Qu M, Zhu H, Liu J, Liu G, Xiong H (2014) A cost-effective recommender system for taxi drivers. Proc. 20th ACM SIGKDD Internat. Conf. on 
+Knowledge Discovery and Data Mining (ACM, New York), 45–54.
+Sun J, Guan C, Hong MJ (2017) Exploiting optimization mechanism for pick-up points recommendations. Proc. Internat. Conf. on Comput. Sys -
+tems, Electronics, and Control (IEEE, New York), 1180–1184.
+Thekumparampil KK, Wang C, Oh S, Li LJ (2018) Attention-based graph neural network for semi-supervised learning. Preprint, submitted March 10, 
+https:/ /arxiv.org/abs/1803.03735.
+Wang Y, Wu C, Zhu T (2019) Mobile hailing technology and taxi driving behaviors. Marketing Sci. 38(5):734–755.
+Wu L, Hu S, Yin L, Wang Y, Chen Z, Guo M, Chen H, et al. (2017) Optimizing cruising routes for taxi drivers using a spatio-temporal trajec -
+tory model. ISPRS Internat. J. of Geo-Inform. 6(11):373.
+Wu Z, Pan S, Chen F, Long G, Zhang C, Philip SY (2020a) A comprehensive survey on graph neural networks. IEEE Trans. Neural Networks 
+Learn. Systems 32(1):4–24.
+Wu Z, Pan S, Long G, Jiang J, Chang X, Zhang C (2020b) Connecting the dots: Multivariate time series forecasting with graph neural net -
+works. Proc. 26th ACM SIGKDD Internat. Conf. on Knowledge Discovery & Data Mining (ACM, New York).
+Xiao K, Ye Z, Zhang L, Zhou W, Ge Y, Deng Y (2020) Multi-user mobile sequential recommendation for route optimization. ACM Trans. 
+Knowledge Discovery Data 14(5):1–28.
+Xu J, Rahmatizadeh R, B ¨ol ¨oni L, Turgut D (2017) A sequence learning model with recurrent neural networks for taxi demand prediction. 
+Proc. IEEE 42nd Conf. on Local Comput. Networks, 261–268.
+Xu T, Zhu H, Zhao X, Liu Q, Zhong H, Chen E, Xiong H (2016) Taxi driving behavior analysis in latent vehicle-to-vehicle networks: A social 
+influence perspective. Proc. 22nd ACM SIGKDD Internat. Conf. on Knowledge Discovery and Data Mining (ACM, New York), 1285–1294.
+Yang H, Shao C, Wang H, Ye J (2020) Integrated reward scheme and surge pricing in a ridesourcing market. Transportation Res. Part B: Meth -
+odological 134:126–142.
+Yao H, Wu F, Ke J, Tangg X, Jia Y, Lu S, Gong P, et al. (2018) Deep multi-view spatial-temporal network for taxi demand prediction. Proc. 
+AAAI Conf. Artificial Intelligence (AAAI Press, Palo Alto, CA).
+Ye Z, Xiao K, Deng Y (2018) A unified theory of the mobile sequential recommendation problem. Proc. IEEE Internat. Conf. on Data Mining 
+(IEEE, Piscataway, NJ), 1380–1385.
+Ye Z, Xiao K, Ge Y, Deng Y (2019) Applying simulated annealing and parallel computing to the mobile sequential recommendation. IEEE 
+Trans. Knowledge and Data Engrg. 31(2):243–256.
+Yu R, Li Y, Shahabi C, Demiryurek U, Liu Y (2017) Deep learning: A generic approach for extreme condition traffic forecasting. Proc. SIAM 
+Internat. Conf. on Data Mining (SIAM, Philadelphia), 777–785.
+Yuan H, Li G (2021) A survey of traffic prediction: From spatio-temporal data to intelligent transportation. Data Sci. Engrg. 6(1):63–85.
+Yuan J, Zheng Y, Xie X, Sun G (2013a) T-drive: Enhancing driving directions with taxi drivers’ intelligence. IEEE Trans. Knowledge Data Engrg. 
+25(1):220–232.
+Yuan J, Zheng Y, Zhang L, Xie X (2013b) T-finder: A recommender system for finding passengers and vacant taxis. IEEE Trans. Knowledge 
+Data Engrg. 25(10):2390–2403.
+Yuan J, Zheng Y, Zhang L, Xie X, Sun G (2011) Where to find my next passenger. Proc. 13th Internat. Conf. on Ubiquitous Comput. (ACM, New 
+York), 109–118.
+Yuan J, Zheng Y, Zhang C, Xie W, Xie X, Sun G, Huang Y (2010) T-drive: Driving directions based on taxi trajectories. Proc. 18th SIGSPATIAL 
+Internat. Conf. on Adv. in Geographic Inform. Systems (ACM, New York), 99–108.
+Zhang C, Zhu F, Lv Y, Ye P, Wang FY (2022) Mlrnn: Taxi demand prediction based on multi-level deep learning and regional heterogeneity 
+analysis. IEEE Trans. Intelligent Transportation Systems. 23(7):8412–8422.
+Zhang J, Shi X, Xie J, Ma H, King I, Yeung DY (2018) GaAN: Gated attention networks for learning on large and spatiotemporal graphs. Proc. 
+34th Conf. on Uncertainty in Artificial Intelligence, vol. 1, 339–349.
+Zhu H, Chen E, Xiong H, Yu K, Cao H, Tian J (2014) Mining mobile user preferences for personalized context-aware recommendation. ACM 
+Trans. Intelligent Systems Tech. 5(4):58:1–58:27.
+Zhu Z, Ke J, Wang H (2021) A mean-field markov decision process model for spatial-temporal subsidies in ride-sourcing markets. Transporta -
+tion Res. Part B: Methodological 150:540–565.
+Liu et al.: Sequential Route Recommendation 
+INFORMS Journal on Computing, 2023, vol. 35, no. 5, pp. 1098–1119, © 2023 INFORMS 1119 
+Copyright
+2023,
+by
+INFORMS,
+all
+rights
+reserved.
+Copyright
+of
+Journal
+on
+Computing
+is
+the
+property
+of
+INFORMS:
+Institute
+for
+Operations
+Research
+and
+its
+content
+may
+not
+be
+copied
+or
+emailed
+to
+multiple
+sites
+or
+posted
+to
+a
+listserv
+without
+the
+copyright
+holder's
+express
+written
+permission.
+However,
+users
+may
+print,
+download,
+or
+email
+articles
+for
+individual
+use.
