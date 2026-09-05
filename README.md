@@ -28,6 +28,19 @@ Below is the BibTex for citing this version of the code.
   note =          {https://github.com/INFORMSJoC/2021.0112},
 }  
 ```
+## Setup and Configuration
+
+### Map Configuration (CARTO API Key)
+The web application uses CARTO Dark Matter basemaps. To remove the "API KEY REQUIRED" watermark, you must provide a free legacy CARTO Basemaps API key.
+
+1. Go to [CARTO Basemaps API Key](https://carto.com/basemaps/apikey) and generate a free key.
+2. Create a `.env` file in the root directory (e.g. `myroute/.env`).
+3. Add the following line to your `.env` file:
+   ```env
+   CARTO_API_KEY=your_api_key_here
+   ```
+This key is securely loaded by the backend and passed to the frontend dynamically, ensuring it is not leaked in source control. Ensure `.env` remains in your `.gitignore`.
+
 ## Requirements
 
 For this project, we use the following Python Packages:
