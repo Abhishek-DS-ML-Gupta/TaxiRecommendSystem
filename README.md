@@ -28,9 +28,38 @@ Below is the BibTex for citing this version of the code.
   note =          {https://github.com/INFORMSJoC/2021.0112},
 }  
 ```
-## Setup and Configuration
+## Installation and Usage
 
-### Map Configuration (CARTO API Key)
+### Repository
+Clone the project repository from GitHub:
+```bash
+git clone https://github.com/Abhishek-DS-ML-Gupta/TaxiRecommendSystem.git
+cd TaxiRecommendSystem
+```
+
+### Tools and Technologies Used
+* **uv**: An extremely fast Python package installer and resolver. We use `uv` for managing the virtual environment and installing dependencies.
+* **FastAPI**: A modern, high-performance web framework for building the backend APIs.
+* **Uvicorn**: An ASGI web server implementation used to run the FastAPI backend.
+* **python-dotenv**: Used to securely load environment variables (like API keys) from a `.env` file.
+* **Leaflet**: A leading open-source JavaScript library for mobile-friendly interactive maps.
+* **CARTO**: A platform for spatial data analysis and visualization, used here for high-quality dark mode basemaps.
+
+### 1. Environment Setup
+We recommend using [uv](https://github.com/astral-sh/uv) to manage your Python environment.
+```bash
+# Create a virtual environment using uv
+uv venv
+
+# Activate the virtual environment (Windows)
+.venv\Scripts\activate
+# Or on macOS/Linux: source .venv/bin/activate
+
+# Install the application dependencies extremely fast with uv
+uv pip install -r requirements_app.txt
+```
+
+### 2. Map Configuration (CARTO API Key)
 The web application uses CARTO Dark Matter basemaps. To remove the "API KEY REQUIRED" watermark, you must provide a free legacy CARTO Basemaps API key.
 
 1. Go to [CARTO Basemaps API Key](https://carto.com/basemaps/apikey) and generate a free key.
@@ -40,6 +69,14 @@ The web application uses CARTO Dark Matter basemaps. To remove the "API KEY REQU
    CARTO_API_KEY=your_api_key_here
    ```
 This key is securely loaded by the backend and passed to the frontend dynamically, ensuring it is not leaked in source control. Ensure `.env` remains in your `.gitignore`.
+
+### 3. Running the Application
+Once the dependencies are installed and the `.env` file is configured, start the web server using Uvicorn:
+```bash
+# Run the FastAPI server
+uvicorn app.main:app --host 0.0.0.0 --port 8000
+```
+Then, open your web browser and navigate to: **[http://localhost:8000](http://localhost:8000)**
 
 ## Requirements
 
