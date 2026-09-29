@@ -6,9 +6,12 @@ Run with:
 Then open: http://localhost:8000
 """
 import sys, io
-# Force UTF-8 stdout on Windows so emoji in print() don't crash
+# Force UTF-8 stdout on Windows with line buffering so logs print in real-time
 try:
-    sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8', errors='replace')
+    if hasattr(sys.stdout, 'reconfigure'):
+        sys.stdout.reconfigure(encoding='utf-8', errors='replace', line_buffering=True)
+    else:
+        sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8', errors='replace', line_buffering=True)
 except Exception:
     pass
 
@@ -30,18 +33,18 @@ load_dotenv()
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    print("=" * 60)
-    print("[TAXI] Taxi Route Recommender -- Starting Up")
-    print("=" * 60)
+    print("=" * 60, flush=True)
+    print("[TAXI] Taxi Route Recommender -- Starting Up", flush=True)
+    print("=" * 60, flush=True)
 
     data_dir = os.path.join(os.path.dirname(__file__), '..', 'data')
     load_all(data_dir=data_dir, time_limit_tau=10.0)
 
-    print("=" * 60)
-    print("[OK] Ready! Open http://localhost:8000 in your browser")
-    print("=" * 60)
+    print("=" * 60, flush=True)
+    print("[OK] Ready! Open http://localhost:8000 in your browser", flush=True)
+    print("=" * 60, flush=True)
     yield
-    print("Shutting down...")
+    print("Shutting down...", flush=True)
 
 
 # ─── App ──────────────────────────────────────────────────────────────────────
@@ -78,7 +81,7 @@ app.include_router(stats.router, prefix="/api", tags=["Model Statistics"])
 async def get_config():
     """Returns frontend configuration such as API keys from the .env file."""
     return {
-        "carto_api_key": os.environ.get("CARTO_API_KEY", "")
+        "mapbox_access_token": os.environ.get("MAPBOX_ACCESS_TOKEN", "")
     }
 
 # ─── Static Files (Frontend SPA) ──────────────────────────────────────────────

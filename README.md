@@ -42,8 +42,8 @@ cd TaxiRecommendSystem
 * **FastAPI**: A modern, high-performance web framework for building the backend APIs.
 * **Uvicorn**: An ASGI web server implementation used to run the FastAPI backend.
 * **python-dotenv**: Used to securely load environment variables (like API keys) from a `.env` file.
-* **Leaflet**: A leading open-source JavaScript library for mobile-friendly interactive maps.
-* **CARTO**: A platform for spatial data analysis and visualization, used here for high-quality dark mode basemaps.
+* **Mapbox GL JS**: Interactive vector web mapping library for hardware-accelerated rendering, heatmaps, and routing.
+* **Mapbox Geocoding API**: Forward/reverse address search allowing users to search and navigate to any Beijing landmark.
 
 ### 1. Environment Setup
 We recommend using [uv](https://github.com/astral-sh/uv) to manage your Python environment.
@@ -59,16 +59,15 @@ uv venv
 uv pip install -r requirements_app.txt
 ```
 
-### 2. Map Configuration (CARTO API Key)
-The web application uses CARTO Dark Matter basemaps. To remove the "API KEY REQUIRED" watermark, you must provide a free legacy CARTO Basemaps API key.
+### 2. Map Configuration (Mapbox Access Token)
+The web application uses **Mapbox GL JS**. To activate official Mapbox vector styles and geocoding:
 
-1. Go to [CARTO Basemaps API Key](https://carto.com/basemaps/apikey) and generate a free key.
-2. Create a `.env` file in the root directory (e.g. `myroute/.env`).
-3. Add the following line to your `.env` file:
+1. Obtain a free access token from [Mapbox](https://account.mapbox.com/).
+2. Create or update your `.env` file in the root directory:
    ```env
-   CARTO_API_KEY=your_api_key_here
+   MAPBOX_ACCESS_TOKEN=your_mapbox_access_token_here
    ```
-This key is securely loaded by the backend and passed to the frontend dynamically, ensuring it is not leaked in source control. Ensure `.env` remains in your `.gitignore`.
+This token is securely read by FastAPI and dynamically injected into the frontend, keeping your credentials secure from version control. If no token is provided, the application runs seamlessly using a resilient dark-matter basemap. Ensure `.env` remains in your `.gitignore`.
 
 ### 3. Running the Application
 Once the dependencies are installed and the `.env` file is configured, start the web server using Uvicorn:

@@ -75,12 +75,12 @@ def load_all(data_dir: str = None, time_limit_tau: float = 10.0):
         data_dir = os.path.join(os.path.dirname(__file__), '..', '..', 'data')
     data_dir = os.path.abspath(data_dir)
 
-    print(f"[startup] Loading data from: {data_dir}")
+    print(f"[startup] Loading data from: {data_dir}", flush=True)
 
     # 1. Load base road network
     processor = DataProcessor(data_dir=data_dir)
     G, edges_df, vertices_df = processor.load_network()
-    print(f"[startup] Network: {G.number_of_nodes()} nodes, {G.number_of_edges()} edges")
+    print(f"[startup] Network: {G.number_of_nodes()} nodes, {G.number_of_edges()} edges", flush=True)
 
     # 2. Build node coordinate lookup
     node_coords = {}
@@ -97,7 +97,7 @@ def load_all(data_dir: str = None, time_limit_tau: float = 10.0):
     edge_coords = {}  # midpoint of each edge
 
     if network_props is not None:
-        print(f"[startup] Using real pickup probabilities from network_properties.csv ({len(network_props)} rows)")
+        print(f"[startup] Using real pickup probabilities from network_properties.csv ({len(network_props)} rows)", flush=True)
         for _, row in network_props.iterrows():
             # Key by (source_id, target_id) → we'll use edge_id later
             src = int(row['source_id'])
@@ -120,7 +120,7 @@ def load_all(data_dir: str = None, time_limit_tau: float = 10.0):
                 taxi_counts[eid] = max(tcnt, 1)
                 edge_coords[eid] = (mid_lat, mid_lon)
     else:
-        print("[startup] network_properties.csv not found, using simulated probabilities")
+        print("[startup] network_properties.csv not found, using simulated probabilities", flush=True)
 
     # Fill any missing edge_ids from edges_df with random values and coords from vertices
     edge_ids = edges_df['edge_id'].unique()
@@ -170,13 +170,13 @@ def load_all(data_dir: str = None, time_limit_tau: float = 10.0):
                 route_G.add_edge(current_edge, next_edge)
                 travel_times[(current_edge, next_edge)] = t_minutes
 
-    print(f"[startup] Routing graph: {route_G.number_of_nodes()} segment nodes, {route_G.number_of_edges()} transitions")
+    print(f"[startup] Routing graph: {route_G.number_of_nodes()} segment nodes, {route_G.number_of_edges()} transitions", flush=True)
 
     # 6. Build classical optimizer (RRS/SRRS)
     optimizer = RouteOptimizer(route_G, time_limit_tau=time_limit_tau)
 
     # 7. Build MORA-LLM Multi-Objective Evolutionary Optimizer
-    print("[startup] Initializing MORA-LLM Multi-Objective Evolutionary Engine...")
+    print("[startup] Initializing MORA-LLM Multi-Objective Evolutionary Engine...", flush=True)
     mora_optimizer = MORARouteOptimizer(
         route_G=route_G,
         time_limit_tau=time_limit_tau,
@@ -221,5 +221,5 @@ def load_all(data_dir: str = None, time_limit_tau: float = 10.0):
         "loaded": True,
     })
 
-    print("[startup] All data and MORA-LLM engine loaded and ready.")
+    print("[startup] All data and MORA-LLM engine loaded and ready.", flush=True)
     return app_state

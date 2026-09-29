@@ -120,5 +120,5 @@ By sequentially updating the probabilities after each recommendation, SRRS ensur
 To make the academic algorithms accessible, we built a modern web application:
 
 *   **Backend (FastAPI):** Serves the model predictions and route calculations via high-performance REST APIs (`/api/recommend`, `/api/hotspots`).
-*   **Frontend (Vanilla JS + Leaflet):** A dynamic, flat SaaS-style interface that requests routes based on user map clicks.
-*   **CARTO Integration & Security:** The application renders high-quality dark mode basemaps using CARTO. To prevent API key leaks, the `CARTO_API_KEY` is securely stored in a `.env` file on the server. The FastAPI backend reads this file via `python-dotenv` and dynamically injects the key into the frontend map initialization, ensuring the repository remains secure when pushed to GitHub.
+*   **Frontend (Vanilla JS + Mapbox GL JS):** A dynamic, flat SaaS-style interface featuring hardware-accelerated vector mapping, native WebGL heatmaps, animated route polylines, and Geocoding address search.
+*   **Mapbox Integration & Security:** The application renders interactive maps using Mapbox GL JS. To prevent API key leaks, the `MAPBOX_ACCESS_TOKEN` is securely stored in a `.env` file on the server. The FastAPI backend reads this file via `python-dotenv` and dynamically injects the token into the frontend map initialization, ensuring the repository remains secure when pushed to GitHub.

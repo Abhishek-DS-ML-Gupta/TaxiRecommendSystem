@@ -1,397 +1,452 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Taxi Route Recommender — INFORMS JoC 2021.0112</title>
-  <meta name="description" content="Real-time sequential route recommendation for vacant taxi drivers using GCN-LSTM prediction and recursive route searching (RRS/SRRS)." />
+  <title>MORTA</title>
+  <meta name="description"
+    content="Real-time sequential route recommendation for vacant taxi drivers using GCN-LSTM prediction and recursive route searching (RRS/SRRS)." />
 
-  <!-- Leaflet CSS -->
-  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
-        integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="" />
+  <!-- Mapbox GL JS CSS -->
+  <link href="https://api.mapbox.com/mapbox-gl-js/v2.1.1/mapbox-gl.css" rel="stylesheet" />
 
   <!-- App CSS -->
   <link rel="stylesheet" href="/static/css/style.css" />
 
+  <!-- Early Theme Initialization to Prevent Flash of Unstyled Content -->
+  <script>
+    (function () {
+      try {
+        var savedTheme = localStorage.getItem('taxi_theme') || 'dark';
+        document.documentElement.setAttribute('data-theme', savedTheme);
+      } catch (e) { }
+    })();
+  </script>
+
   <!-- Favicon SVG -->
-  <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 24 24%22 fill=%22none%22 stroke=%22%23000%22 stroke-width=%222%22 stroke-linecap=%22round%22 stroke-linejoin=%22round%22><path d=%22M19 17h2c.6 0 1-.4 1-1v-3c0-.9-.7-1.7-1.5-1.9C18.7 10.6 16 10 16 10s-1.3-1.4-2.2-2.3c-.5-.4-1.1-.7-1.8-.7H5c-.6 0-1.1.4-1.4.9l-1.4 2.9A3.7 3.7 0 0 0 2 12v4c0 .6.4 1 1 1h2%22/><circle cx=%227%22 cy=%2217%22 r=%222%22/><circle cx=%2217%22 cy=%2217%22 r=%222%22/></svg>" />
+  <link rel="icon"
+    href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 24 24%22 fill=%22none%22 stroke=%22%23000%22 stroke-width=%222%22 stroke-linecap=%22round%22 stroke-linejoin=%22round%22><path d=%22M19 17h2c.6 0 1-.4 1-1v-3c0-.9-.7-1.7-1.5-1.9C18.7 10.6 16 10 16 10s-1.3-1.4-2.2-2.3c-.5-.4-1.1-.7-1.8-.7H5c-.6 0-1.1.4-1.4.9l-1.4 2.9A3.7 3.7 0 0 0 2 12v4c0 .6.4 1 1 1h2%22/><circle cx=%227%22 cy=%2217%22 r=%222%22/><circle cx=%2217%22 cy=%2217%22 r=%222%22/></svg>" />
 </head>
 
 <body>
-<div id="app">
+  <div id="app">
 
-  <!-- ═══════════════════════════════════════════════════════════ HEADER -->
-  <header id="header">
-    <div class="header-left">
-      <div class="header-logo">
-        <i data-lucide="car"></i>
+    <!-- ═══════════════════════════════════════════════════════════ HEADER -->
+    <header id="header">
+      <div class="header-left">
+        <div class="header-logo">
+          <i data-lucide="car"></i>
+        </div>
+        <div>
+          <div class="header-title">Taxi Route Recommender</div>
+          <div class="header-subtitle">INFORMS JoC 2021.0112 · GCN-LSTM + RRS/SRRS · Beijing</div>
+        </div>
       </div>
-      <div>
-        <div class="header-title">Taxi Route Recommender</div>
-        <div class="header-subtitle">INFORMS JoC 2021.0112 · GCN-LSTM + RRS/SRRS · Beijing</div>
+      <div class="header-right">
+        <div class="status-indicator">
+          <div class="status-dot loading" id="status-dot"></div>
+          <span class="status-label">Initializing...</span>
+        </div>
+
+        <!-- Duo Mode Milky Theme Switcher -->
+        <div class="theme-switcher" id="theme-switcher" role="radiogroup" aria-label="Theme mode switcher">
+          <button class="theme-btn active" id="theme-btn-dark" data-theme="dark" role="radio" aria-checked="true"
+            title="Switch to Dark Milky Theme">
+            <i data-lucide="moon"></i>
+            <span>Dark</span>
+          </button>
+          <button class="theme-btn" id="theme-btn-light" data-theme="light" role="radio" aria-checked="false"
+            title="Switch to Light Milky Theme">
+            <i data-lucide="sun"></i>
+            <span>Light</span>
+          </button>
+        </div>
+
+        <nav class="nav-tabs" role="tablist">
+          <button class="nav-tab active" data-tab="recommend" role="tab" id="tab-recommend"><i data-lucide="map"></i>
+            Recommend</button>
+          <button class="nav-tab" data-tab="overview" role="tab" id="tab-overview"><i data-lucide="bar-chart-2"></i>
+            Overview</button>
+          <button class="nav-tab" data-tab="stats" role="tab" id="tab-stats"><i data-lucide="flask-conical"></i> Model
+            Stats</button>
+        </nav>
       </div>
-    </div>
-    <div class="header-right">
-      <div class="status-indicator">
-        <div class="status-dot loading" id="status-dot"></div>
-        <span class="status-label">Initializing...</span>
+    </header>
+
+    <!-- ═══════════════════════════════════════════════════════════ MAP -->
+    <main id="map-container">
+      <div id="map"></div>
+
+      <!-- Mapbox overlay bar (Brand, Geocoding Search, Style Toggles) -->
+      <div id="mapbox-bar" class="mapbox-bar">
+        <div class="mapbox-brand">
+          <i data-lucide="map" style="width:14px;height:14px;color:var(--teal)"></i>
+          <span id="mapbox-status-text">Mapbox GL JS</span>
+        </div>
+        <div class="mapbox-search-wrap">
+          <input type="text" id="input-geocode" placeholder="Search Beijing address..." autocomplete="off" />
+          <button id="btn-geocode" title="Search via Mapbox Geocoding"><i data-lucide="search"
+              style="width:13px;height:13px"></i></button>
+        </div>
+        <div class="mapbox-style-toggle">
+          <button id="btn-style-dark" class="active" title="Dark Mapbox Style">Dark</button>
+          <button id="btn-style-light" title="Light Mapbox Style">Light</button>
+          <button id="btn-style-streets" title="Streets Mapbox Style">Streets</button>
+        </div>
       </div>
-      <nav class="nav-tabs" role="tablist">
-        <button class="nav-tab active" data-tab="recommend" role="tab" id="tab-recommend"><i data-lucide="map"></i> Recommend</button>
-        <button class="nav-tab" data-tab="overview" role="tab" id="tab-overview"><i data-lucide="bar-chart-2"></i> Overview</button>
-        <button class="nav-tab" data-tab="stats" role="tab" id="tab-stats"><i data-lucide="flask-conical"></i> Model Stats</button>
-      </nav>
-    </div>
-  </header>
 
-  <!-- ═══════════════════════════════════════════════════════════ MAP -->
-  <main id="map-container">
-    <div id="map"></div>
+      <!-- Map loading overlay -->
+      <div id="map-loading">
+        <div class="spinner"></div>
+        <div class="loading-text">Loading road network...</div>
+        <div class="loading-sub">38,723 road segments · Beijing</div>
+      </div>
 
-    <!-- Map loading overlay -->
-    <div id="map-loading">
-      <div class="spinner"></div>
-      <div class="loading-text">Loading road network...</div>
-      <div class="loading-sub">38,723 road segments · Beijing</div>
-    </div>
+      <!-- Instruction tooltip -->
+      <div class="map-instruction hidden">
+        <i data-lucide="map-pin"></i> Click anywhere on the map to set taxi start position
+      </div>
+    </main>
 
-    <!-- Instruction tooltip -->
-    <div class="map-instruction hidden">
-      <i data-lucide="map-pin"></i> Click anywhere on the map to set taxi start position
-    </div>
-  </main>
+    <!-- ═══════════════════════════════════════════════════════════ SIDE PANEL -->
+    <aside id="side-panel">
 
-  <!-- ═══════════════════════════════════════════════════════════ SIDE PANEL -->
-  <aside id="side-panel">
+      <!-- ── RECOMMEND TAB ─────────────────────────────────────── -->
+      <div class="tab-panel" data-panel="recommend" style="display:flex;flex-direction:column">
 
-    <!-- ── RECOMMEND TAB ─────────────────────────────────────── -->
-    <div class="tab-panel" data-panel="recommend" style="display:flex;flex-direction:column">
+        <!-- Controls Section -->
+        <!-- Controls Section -->
+        <div class="panel-section">
+          <div class="section-title">Route Parameters</div>
 
-      <!-- Controls Section -->
-      <!-- Controls Section -->
-      <div class="panel-section">
-        <div class="section-title">Route Parameters</div>
-
-        <!-- Algorithm Selector -->
-        <div class="control-group">
-          <div class="control-label">
-            <span>Algorithm</span>
-            <span class="control-value" id="val-algorithm" style="color:var(--teal)">MORA-LLM (2026)</span>
+          <!-- Algorithm Selector -->
+          <div class="control-group">
+            <div class="control-label">
+              <span>Algorithm</span>
+              <span class="control-value" id="val-algorithm" style="color:var(--teal)">MORA-LLM (2026)</span>
+            </div>
+            <div class="algo-grid">
+              <button class="algo-btn active" data-algo="mora_llm" id="algo-mora">
+                <i data-lucide="brain"></i> MORA-LLM
+              </button>
+              <button class="algo-btn" data-algo="srrs" id="algo-srrs">
+                <i data-lucide="zap"></i> SRRS
+              </button>
+              <button class="algo-btn" data-algo="rrs" id="algo-rrs">
+                <i data-lucide="search"></i> RRS
+              </button>
+            </div>
+            <div style="margin-top:6px">
+              <select id="select-ablation" class="custom-select" style="display:none;width:100%;font-size:11px;">
+                <option value="mora_llm">MORA-LLM (Full: LEPS + LES + LLM Reasoning)</option>
+                <option value="mora_wollm">MORA-LLM(-WOLLM) (Ablation without LLM)</option>
+                <option value="mora_wom">MORA-LLM(-WOM) (Ablation without Mutation)</option>
+                <option value="mora_woq">MORA-LLM(-WOQ) (Ablation without Query)</option>
+              </select>
+            </div>
           </div>
-          <div class="algo-grid">
-            <button class="algo-btn active" data-algo="mora_llm" id="algo-mora">
-              <i data-lucide="brain"></i> MORA-LLM
-            </button>
-            <button class="algo-btn" data-algo="srrs" id="algo-srrs">
-              <i data-lucide="zap"></i> SRRS
-            </button>
-            <button class="algo-btn" data-algo="rrs" id="algo-rrs">
-              <i data-lucide="search"></i> RRS
-            </button>
-          </div>
-          <div style="margin-top:6px">
-            <select id="select-ablation" class="custom-select" style="display:none;width:100%;font-size:11px;">
-              <option value="mora_llm">MORA-LLM (Full: LEPS + LES + LLM Reasoning)</option>
-              <option value="mora_wollm">MORA-LLM(-WOLLM) (Ablation without LLM)</option>
-              <option value="mora_wom">MORA-LLM(-WOM) (Ablation without Mutation)</option>
-              <option value="mora_woq">MORA-LLM(-WOQ) (Ablation without Query)</option>
+
+          <!-- Driver Persona (MORA-LLM) -->
+          <div class="control-group" id="group-driver-persona">
+            <div class="control-label">
+              <span>Driver Persona (Cold-Start Alleviation)</span>
+            </div>
+            <select id="select-driver-persona" class="custom-select" style="width:100%">
+              <option value="new_driver_cold_start">Alex Zhang (New Driver · Cold Start ❄️)</option>
+              <option value="experienced_veteran">Master Wang (12-yr Veteran · CBD Specialist 🎖️)</option>
+              <option value="night_shift_cruiser">Sarah Liu (Night Shift Cruiser · Surge Seeker 🌙)</option>
+              <option value="airport_express">Li Na (Airport Express · Long Haul Transit ✈️)</option>
+              <option value="low_carbon_eco">Chen Wei (Eco Cruiser · Anti-Idling Arterials 🍃)</option>
             </select>
-          </div>
-        </div>
-
-        <!-- Driver Persona (MORA-LLM) -->
-        <div class="control-group" id="group-driver-persona">
-          <div class="control-label">
-            <span>Driver Persona (Cold-Start Alleviation)</span>
-          </div>
-          <select id="select-driver-persona" class="custom-select" style="width:100%">
-            <option value="new_driver_cold_start">Alex Zhang (New Driver · Cold Start ❄️)</option>
-            <option value="experienced_veteran">Master Wang (12-yr Veteran · CBD Specialist 🎖️)</option>
-            <option value="night_shift_cruiser">Sarah Liu (Night Shift Cruiser · Surge Seeker 🌙)</option>
-            <option value="airport_express">Li Na (Airport Express · Long Haul Transit ✈️)</option>
-            <option value="low_carbon_eco">Chen Wei (Eco Cruiser · Anti-Idling Arterials 🍃)</option>
-          </select>
-          <div id="driver-persona-card" class="driver-persona-card">
-            <div class="driver-tag cold-start"><i data-lucide="snowflake" style="width:12px;height:12px"></i> COLD START · 0 PRIOR TRIPS</div>
-            <div class="driver-desc">Newly onboarded taxi driver with minimal trip history. Unfamiliar with peak passenger clusters. Needs safe, reliable, high-probability pickup corridors along arterial roads rather than high-risk speculative cruising.</div>
-            <div class="driver-zones"><b>Affinities:</b> Commercial, Residential</div>
-          </div>
-        </div>
-
-        <!-- Alpha Parameter Slider (Eq. 8) -->
-        <div class="control-group" id="group-alpha">
-          <div class="control-label">
-            <span>Dynamic Score Factor (α)</span>
-            <span class="control-value" id="val-alpha">0.20</span>
-          </div>
-          <input type="range" id="slider-alpha"
-                 min="0.0" max="1.0" step="0.05" value="0.20"
-                 aria-label="Dynamic score correction parameter alpha" />
-        </div>
-
-        <!-- Time Limit Slider -->
-        <div class="control-group">
-          <div class="control-label">
-            <span>Search Time Limit (τ)</span>
-            <span class="control-value" id="val-time-limit">10 min</span>
-          </div>
-          <input type="range" id="slider-time-limit"
-                 min="2" max="30" step="1" value="10"
-                 aria-label="Search time limit in minutes" />
-        </div>
-
-        <!-- Number of Taxis -->
-        <div class="control-group">
-          <div class="control-label">
-            <span>Number of Taxis</span>
-            <span class="control-value" id="val-num-taxis">1 (MORA)</span>
-          </div>
-          <input type="range" id="slider-num-taxis"
-                 min="1" max="8" step="1" value="1"
-                 aria-label="Number of taxis for sequential recommendation" />
-        </div>
-
-        <!-- Scenario -->
-        <div class="control-group">
-          <div class="control-label"><span>Scenario</span></div>
-          <div class="scenario-grid">
-            <button class="scenario-btn active" data-scenario="normal" id="scenario-normal"><i data-lucide="sun"></i> Normal</button>
-            <button class="scenario-btn" data-scenario="peak" id="scenario-peak"><i data-lucide="flame"></i> Peak</button>
-            <button class="scenario-btn" data-scenario="rainy" id="scenario-rainy"><i data-lucide="cloud-rain"></i> Rainy</button>
-            <button class="scenario-btn" data-scenario="night" id="scenario-night"><i data-lucide="moon"></i> Night</button>
-          </div>
-        </div>
-
-        <!-- Map Layers -->
-        <div class="section-title" style="margin-top:8px">Map Layers</div>
-        <div class="toggle-row">
-          <span class="toggle-label"><i data-lucide="flame" style="width:14px;height:14px;margin-right:4px;"></i> Pickup Heatmap</span>
-          <label class="toggle-switch">
-            <input type="checkbox" id="toggle-heatmap" checked aria-label="Toggle heatmap" />
-            <span class="toggle-slider"></span>
-          </label>
-        </div>
-        <div class="toggle-row">
-          <span class="toggle-label"><i data-lucide="route" style="width:14px;height:14px;margin-right:4px;"></i> Road Network</span>
-          <label class="toggle-switch">
-            <input type="checkbox" id="toggle-network" checked aria-label="Toggle road network" />
-            <span class="toggle-slider"></span>
-          </label>
-        </div>
-      </div>
-
-      <!-- Action Buttons -->
-      <div class="panel-section" style="padding-top:12px">
-        <button id="btn-recommend" aria-label="Get route recommendation">
-          <i data-lucide="car" style="margin-right:6px"></i> Get Route
-        </button>
-        <button id="btn-accuracy" class="btn-secondary" aria-label="Check recommendation accuracy" disabled>
-          <i data-lucide="badge-check" style="margin-right:6px"></i> Check Accuracy
-        </button>
-        <button id="btn-clear" class="btn-secondary" aria-label="Clear routes">
-          <i data-lucide="x" style="margin-right:4px"></i> Clear
-        </button>
-      </div>
-
-      <div class="panel-section" id="accuracy-panel" style="display:none">
-        <div class="section-title">Recommendation Accuracy</div>
-        <div id="accuracy-result" style="font-size:12px;color:var(--text-secondary);line-height:1.7"></div>
-      </div>
-
-      <!-- Metrics Section -->
-      <div class="panel-section">
-        <div class="section-title">Results</div>
-        <div class="algo-badge" id="algo-badge">MORA-LLM Algorithm</div>
-        <div class="metrics-grid">
-          <div class="metric-card">
-            <div class="metric-label">Expected Earning</div>
-            <div class="metric-value teal" id="metric-earning">—</div>
-            <div class="metric-sub">per trip</div>
-          </div>
-          <div class="metric-card">
-            <div class="metric-label">Route Length</div>
-            <div class="metric-value amber" id="metric-segments">—</div>
-            <div class="metric-sub">road segments</div>
-          </div>
-          <div class="metric-card">
-            <div class="metric-label">Est. Time</div>
-            <div class="metric-value green" id="metric-time">—</div>
-            <div class="metric-sub">minutes</div>
-          </div>
-          <div class="metric-card">
-            <div class="metric-label">Taxis</div>
-            <div class="metric-value purple" id="metric-taxis">—</div>
-            <div class="metric-sub">recommended</div>
-          </div>
-        </div>
-
-        <!-- Multi-Objective Breakdown (MORA-LLM) -->
-        <div id="mora-objectives-card" class="mora-objectives-card" style="display:none">
-          <div class="mora-header">
-            <span><i data-lucide="sparkles" style="width:14px;height:14px;color:var(--teal)"></i> Multi-Objective Pareto Metrics</span>
-            <span class="mora-tag" id="mora-variant-tag">IEEE TEVC 2026</span>
-          </div>
-          <div class="mora-grid">
-            <div class="mora-item">
-              <span class="mora-label">Profit (f1)</span>
-              <span class="mora-val teal" id="mora-f1-val">—</span>
-            </div>
-            <div class="mora-item">
-              <span class="mora-label">Novelty (f2)</span>
-              <span class="mora-val amber" id="mora-f2-val">—</span>
-            </div>
-            <div class="mora-item">
-              <span class="mora-label">Diversity (f3)</span>
-              <span class="mora-val green" id="mora-f3-val">—</span>
-            </div>
-            <div class="mora-item">
-              <span class="mora-label">SDE Fitness</span>
-              <span class="mora-val purple" id="mora-sde-val">—</span>
+            <div id="driver-persona-card" class="driver-persona-card">
+              <div class="driver-tag cold-start"><i data-lucide="snowflake" style="width:12px;height:12px"></i> COLD
+                START · 0 PRIOR TRIPS</div>
+              <div class="driver-desc">Newly onboarded taxi driver with minimal trip history. Unfamiliar with peak
+                passenger clusters. Needs safe, reliable, high-probability pickup corridors along arterial roads rather
+                than high-risk speculative cruising.</div>
+              <div class="driver-zones"><b>Affinities:</b> Commercial, Residential</div>
             </div>
           </div>
-          
-          <!-- Pareto Front Switcher -->
-          <div class="pareto-switcher" id="pareto-switcher" style="display:none">
-            <div class="pareto-title">Pareto Front Alternatives:</div>
-            <div class="pareto-pills">
-              <button class="pareto-pill active" data-alt="balanced" id="pill-balanced">🎯 Balanced</button>
-              <button class="pareto-pill" data-alt="max_profit" id="pill-max-profit">💰 Max Profit</button>
-              <button class="pareto-pill" data-alt="max_exploration" id="pill-max-novelty">🧭 Max Novelty</button>
+
+          <!-- Alpha Parameter Slider (Eq. 8) -->
+          <div class="control-group" id="group-alpha">
+            <div class="control-label">
+              <span>Dynamic Score Factor (α)</span>
+              <span class="control-value" id="val-alpha">0.20</span>
+            </div>
+            <input type="range" id="slider-alpha" min="0.0" max="1.0" step="0.05" value="0.20"
+              aria-label="Dynamic score correction parameter alpha" />
+          </div>
+
+          <!-- Time Limit Slider -->
+          <div class="control-group">
+            <div class="control-label">
+              <span>Search Time Limit (τ)</span>
+              <span class="control-value" id="val-time-limit">10 min</span>
+            </div>
+            <input type="range" id="slider-time-limit" min="2" max="30" step="1" value="10"
+              aria-label="Search time limit in minutes" />
+          </div>
+
+          <!-- Number of Taxis -->
+          <div class="control-group">
+            <div class="control-label">
+              <span>Number of Taxis</span>
+              <span class="control-value" id="val-num-taxis">1 (MORA)</span>
+            </div>
+            <input type="range" id="slider-num-taxis" min="1" max="8" step="1" value="1"
+              aria-label="Number of taxis for sequential recommendation" />
+          </div>
+
+          <!-- Scenario -->
+          <div class="control-group">
+            <div class="control-label"><span>Scenario</span></div>
+            <div class="scenario-grid">
+              <button class="scenario-btn active" data-scenario="normal" id="scenario-normal"><i data-lucide="sun"></i>
+                Normal</button>
+              <button class="scenario-btn" data-scenario="peak" id="scenario-peak"><i data-lucide="flame"></i>
+                Peak</button>
+              <button class="scenario-btn" data-scenario="rainy" id="scenario-rainy"><i data-lucide="cloud-rain"></i>
+                Rainy</button>
+              <button class="scenario-btn" data-scenario="night" id="scenario-night"><i data-lucide="moon"></i>
+                Night</button>
+            </div>
+          </div>
+
+          <!-- Map Layers -->
+          <div class="section-title" style="margin-top:8px">Map Layers</div>
+          <div class="toggle-row">
+            <span class="toggle-label"><i data-lucide="flame" style="width:14px;height:14px;margin-right:4px;"></i>
+              Pickup Heatmap</span>
+            <label class="toggle-switch">
+              <input type="checkbox" id="toggle-heatmap" checked aria-label="Toggle heatmap" />
+              <span class="toggle-slider"></span>
+            </label>
+          </div>
+          <div class="toggle-row">
+            <span class="toggle-label"><i data-lucide="route" style="width:14px;height:14px;margin-right:4px;"></i> Road
+              Network</span>
+            <label class="toggle-switch">
+              <input type="checkbox" id="toggle-network" checked aria-label="Toggle road network" />
+              <span class="toggle-slider"></span>
+            </label>
+          </div>
+        </div>
+
+        <!-- Action Buttons -->
+        <div class="panel-section" style="padding-top:12px">
+          <button id="btn-recommend" aria-label="Get route recommendation">
+            <i data-lucide="car" style="margin-right:6px"></i> Get Route
+          </button>
+          <button id="btn-accuracy" class="btn-secondary" aria-label="Check recommendation accuracy" disabled>
+            <i data-lucide="badge-check" style="margin-right:6px"></i> Check Accuracy
+          </button>
+          <button id="btn-clear" class="btn-secondary" aria-label="Clear routes">
+            <i data-lucide="x" style="margin-right:4px"></i> Clear
+          </button>
+        </div>
+
+        <div class="panel-section" id="accuracy-panel" style="display:none">
+          <div class="section-title">Recommendation Accuracy</div>
+          <div id="accuracy-result" style="font-size:12px;color:var(--text-secondary);line-height:1.7"></div>
+        </div>
+
+        <!-- Metrics Section -->
+        <div class="panel-section">
+          <div class="section-title">Results</div>
+          <div class="algo-badge" id="algo-badge">MORA-LLM Algorithm</div>
+          <div class="metrics-grid">
+            <div class="metric-card">
+              <div class="metric-label">Expected Earning</div>
+              <div class="metric-value teal" id="metric-earning">—</div>
+              <div class="metric-sub">per trip</div>
+            </div>
+            <div class="metric-card">
+              <div class="metric-label">Route Length</div>
+              <div class="metric-value amber" id="metric-segments">—</div>
+              <div class="metric-sub">road segments</div>
+            </div>
+            <div class="metric-card">
+              <div class="metric-label">Est. Time</div>
+              <div class="metric-value green" id="metric-time">—</div>
+              <div class="metric-sub">minutes</div>
+            </div>
+            <div class="metric-card">
+              <div class="metric-label">Taxis</div>
+              <div class="metric-value purple" id="metric-taxis">—</div>
+              <div class="metric-sub">recommended</div>
+            </div>
+          </div>
+
+          <!-- Multi-Objective Breakdown (MORA-LLM) -->
+          <div id="mora-objectives-card" class="mora-objectives-card" style="display:none">
+            <div class="mora-header">
+              <span><i data-lucide="sparkles" style="width:14px;height:14px;color:var(--teal)"></i> Multi-Objective
+                Pareto Metrics</span>
+              <span class="mora-tag" id="mora-variant-tag">IEEE TEVC 2026</span>
+            </div>
+            <div class="mora-grid">
+              <div class="mora-item">
+                <span class="mora-label">Profit (f1)</span>
+                <span class="mora-val teal" id="mora-f1-val">—</span>
+              </div>
+              <div class="mora-item">
+                <span class="mora-label">Novelty (f2)</span>
+                <span class="mora-val amber" id="mora-f2-val">—</span>
+              </div>
+              <div class="mora-item">
+                <span class="mora-label">Diversity (f3)</span>
+                <span class="mora-val green" id="mora-f3-val">—</span>
+              </div>
+              <div class="mora-item">
+                <span class="mora-label">SDE Fitness</span>
+                <span class="mora-val purple" id="mora-sde-val">—</span>
+              </div>
+            </div>
+
+            <!-- Pareto Front Switcher -->
+            <div class="pareto-switcher" id="pareto-switcher" style="display:none">
+              <div class="pareto-title">Pareto Front Alternatives:</div>
+              <div class="pareto-pills">
+                <button class="pareto-pill active" data-alt="balanced" id="pill-balanced">🎯 Balanced</button>
+                <button class="pareto-pill" data-alt="max_profit" id="pill-max-profit">💰 Max Profit</button>
+                <button class="pareto-pill" data-alt="max_exploration" id="pill-max-novelty">🧭 Max Novelty</button>
+              </div>
+            </div>
+          </div>
+
+          <!-- LLM Explainability Card -->
+          <div id="llm-explanation-card" class="llm-explanation-card" style="display:none">
+            <div class="xai-header">
+              <i data-lucide="bot" style="width:16px;height:16px;color:#00d4ff"></i>
+              <span>AI Reasoning & Explainability (NLG)</span>
+            </div>
+            <div class="xai-quote" id="xai-summary-text">—</div>
+            <div class="xai-steps-toggle" id="xai-steps-toggle">
+              <span>View Step-by-Step AI Rationale</span>
+              <i data-lucide="chevron-down" style="width:14px;height:14px"></i>
+            </div>
+            <div class="xai-steps-list" id="xai-steps-list" style="display:none"></div>
+          </div>
+        </div>
+
+        <!-- Taxi List -->
+        <div class="panel-section" style="flex:1">
+          <div class="section-title">Recommended Routes</div>
+          <div class="taxi-list" id="taxi-list">
+            <div class="empty-state">
+              <div class="empty-icon"><i data-lucide="map" style="width:32px;height:32px"></i></div>
+              <div class="empty-text">Click anywhere on the<br>Beijing map to get<br>route recommendations.</div>
             </div>
           </div>
         </div>
 
-        <!-- LLM Explainability Card -->
-        <div id="llm-explanation-card" class="llm-explanation-card" style="display:none">
-          <div class="xai-header">
-            <i data-lucide="bot" style="width:16px;height:16px;color:#00d4ff"></i>
-            <span>AI Reasoning & Explainability (NLG)</span>
-          </div>
-          <div class="xai-quote" id="xai-summary-text">—</div>
-          <div class="xai-steps-toggle" id="xai-steps-toggle">
-            <span>View Step-by-Step AI Rationale</span>
-            <i data-lucide="chevron-down" style="width:14px;height:14px"></i>
-          </div>
-          <div class="xai-steps-list" id="xai-steps-list" style="display:none"></div>
-        </div>
-      </div>
+      </div><!-- /recommend tab -->
 
-      <!-- Taxi List -->
-      <div class="panel-section" style="flex:1">
-        <div class="section-title">Recommended Routes</div>
-        <div class="taxi-list" id="taxi-list">
-          <div class="empty-state">
-            <div class="empty-icon"><i data-lucide="map" style="width:32px;height:32px"></i></div>
-            <div class="empty-text">Click anywhere on the<br>Beijing map to get<br>route recommendations.</div>
-          </div>
-        </div>
-      </div>
-
-    </div><!-- /recommend tab -->
-
-    <!-- ── OVERVIEW TAB ─────────────────────────────────────── -->
-    <div class="tab-panel" data-panel="overview" style="display:none;flex-direction:column">
-      <div class="panel-section">
-        <div class="section-title">Road Network (Beijing)</div>
-        <div class="network-stats">
-          <div class="net-stat">
-            <span class="net-stat-value" id="net-intersections">—</span>
-            <span class="net-stat-label">Intersections</span>
-          </div>
-          <div class="net-stat">
-            <span class="net-stat-value" id="net-segments">—</span>
-            <span class="net-stat-label">Road Segments</span>
-          </div>
-          <div class="net-stat">
-            <span class="net-stat-value" id="net-mean-prob">—</span>
-            <span class="net-stat-label">Mean Pickup Prob</span>
-          </div>
-          <div class="net-stat">
-            <span class="net-stat-value" id="net-mean-earn">—</span>
-            <span class="net-stat-label">Mean Earning</span>
+      <!-- ── OVERVIEW TAB ─────────────────────────────────────── -->
+      <div class="tab-panel" data-panel="overview" style="display:none;flex-direction:column">
+        <div class="panel-section">
+          <div class="section-title">Road Network (Beijing)</div>
+          <div class="network-stats">
+            <div class="net-stat">
+              <span class="net-stat-value" id="net-intersections">—</span>
+              <span class="net-stat-label">Intersections</span>
+            </div>
+            <div class="net-stat">
+              <span class="net-stat-value" id="net-segments">—</span>
+              <span class="net-stat-label">Road Segments</span>
+            </div>
+            <div class="net-stat">
+              <span class="net-stat-value" id="net-mean-prob">—</span>
+              <span class="net-stat-label">Mean Pickup Prob</span>
+            </div>
+            <div class="net-stat">
+              <span class="net-stat-value" id="net-mean-earn">—</span>
+              <span class="net-stat-label">Mean Earning</span>
+            </div>
           </div>
         </div>
-      </div>
 
-      <div class="panel-section">
-        <div class="section-title">About This System</div>
-        <div class="paper-card">
-          <div class="paper-title">A Cost-Effective Sequential Route Recommender System for Taxi Drivers</div>
-          <div class="paper-authors">Liu · Teng · Chen · Xiong · 2023</div>
-          <div class="paper-meta">
-            <span class="paper-tag">INFORMS JoC</span>
-            <span class="paper-tag">GCN-LSTM</span>
-            <span class="paper-tag">RRS / SRRS</span>
+        <div class="panel-section">
+          <div class="section-title">About This System</div>
+          <div class="paper-card">
+            <div class="paper-title">A Cost-Effective Sequential Route Recommender System for Taxi Drivers</div>
+            <div class="paper-authors">Liu · Teng · Chen · Xiong · 2023</div>
+            <div class="paper-meta">
+              <span class="paper-tag">INFORMS JoC</span>
+              <span class="paper-tag">GCN-LSTM</span>
+              <span class="paper-tag">RRS / SRRS</span>
+            </div>
           </div>
         </div>
-      </div>
 
-      <div class="panel-section">
-        <div class="section-title">How It Works</div>
-        <div style="font-size:12px; color:var(--text-secondary); line-height:1.8; display:flex; flex-direction:column; gap:12px">
-          <div style="display:flex; gap:10px; align-items:flex-start">
-            <span class="badge badge-teal">1</span>
-            <div><b style="color:var(--text-primary)">GCN Layer</b><br>Captures spatial demand distribution.</div>
-          </div>
-          <div style="display:flex; gap:10px; align-items:flex-start">
-            <span class="badge badge-amber">2</span>
-            <div><b style="color:var(--text-primary)">LSTM Layer</b><br>Models temporal dynamics.</div>
-          </div>
-          <div style="display:flex; gap:10px; align-items:flex-start">
-            <span class="badge badge-green">3</span>
-            <div><b style="color:var(--text-primary)">RRS Algorithm</b><br>Recursively searches using Bellman eq.</div>
-          </div>
-          <div style="display:flex; gap:10px; align-items:flex-start">
-            <span class="badge badge-purple">4</span>
-            <div><b style="color:var(--text-primary)">SRRS for Fairness</b><br>Sequentially assigns routes to multiple taxis.</div>
+        <div class="panel-section">
+          <div class="section-title">How It Works</div>
+          <div
+            style="font-size:12px; color:var(--text-secondary); line-height:1.8; display:flex; flex-direction:column; gap:12px">
+            <div style="display:flex; gap:10px; align-items:flex-start">
+              <span class="badge badge-teal">1</span>
+              <div><b style="color:var(--text-primary)">GCN Layer</b><br>Captures spatial demand distribution.</div>
+            </div>
+            <div style="display:flex; gap:10px; align-items:flex-start">
+              <span class="badge badge-amber">2</span>
+              <div><b style="color:var(--text-primary)">LSTM Layer</b><br>Models temporal dynamics.</div>
+            </div>
+            <div style="display:flex; gap:10px; align-items:flex-start">
+              <span class="badge badge-green">3</span>
+              <div><b style="color:var(--text-primary)">RRS Algorithm</b><br>Recursively searches using Bellman eq.
+              </div>
+            </div>
+            <div style="display:flex; gap:10px; align-items:flex-start">
+              <span class="badge badge-purple">4</span>
+              <div><b style="color:var(--text-primary)">SRRS for Fairness</b><br>Sequentially assigns routes to multiple
+                taxis.</div>
+            </div>
           </div>
         </div>
-      </div>
 
-      <div class="panel-section">
-        <div class="section-title">Data Sources</div>
-        <div class="data-source-list">
-          <div><i data-lucide="map-pin"></i> <b>Road Network:</b> refined_edges.csv</div>
-          <div><i data-lucide="bar-chart-2"></i> <b>Pickup Probs:</b> network_properties.csv</div>
-          <div><i data-lucide="car"></i> <b>Trajectories:</b> sample_trajectory.csv</div>
-          <div><i data-lucide="cloud-sun"></i> <b>Weather:</b> weather.csv</div>
+        <div class="panel-section">
+          <div class="section-title">Data Sources</div>
+          <div class="data-source-list">
+            <div><i data-lucide="map-pin"></i> <b>Road Network:</b> refined_edges.csv</div>
+            <div><i data-lucide="bar-chart-2"></i> <b>Pickup Probs:</b> network_properties.csv</div>
+            <div><i data-lucide="car"></i> <b>Trajectories:</b> sample_trajectory.csv</div>
+            <div><i data-lucide="cloud-sun"></i> <b>Weather:</b> weather.csv</div>
+          </div>
         </div>
-      </div>
-    </div><!-- /overview tab -->
+      </div><!-- /overview tab -->
 
-    <!-- ── STATS TAB ─────────────────────────────────────── -->
-    <div class="tab-panel" data-panel="stats" style="display:none;flex-direction:column">
-      <div id="stats-content">
-        <div class="empty-state" style="padding:40px 16px">
-          <div class="empty-icon"><i data-lucide="flask-conical" style="width:32px;height:32px"></i></div>
-          <div class="empty-text">Click the Model Stats tab<br>to load experiment results.</div>
+      <!-- ── STATS TAB ─────────────────────────────────────── -->
+      <div class="tab-panel" data-panel="stats" style="display:none;flex-direction:column">
+        <div id="stats-content">
+          <div class="empty-state" style="padding:40px 16px">
+            <div class="empty-icon"><i data-lucide="flask-conical" style="width:32px;height:32px"></i></div>
+            <div class="empty-text">Click the Model Stats tab<br>to load experiment results.</div>
+          </div>
         </div>
-      </div>
-    </div><!-- /stats tab -->
+      </div><!-- /stats tab -->
 
-  </aside><!-- /side-panel -->
+    </aside><!-- /side-panel -->
 
-</div><!-- /app -->
+  </div><!-- /app -->
 
-<!-- ─── External Libraries ────────────────────────────────────────────────── -->
-<!-- Lucide Icons for SVGs -->
-<script src="https://unpkg.com/lucide@latest"></script>
+  <!-- ─── External Libraries ────────────────────────────────────────────────── -->
+  <!-- Lucide Icons for SVGs -->
+  <script src="https://unpkg.com/lucide@latest"></script>
 
-<!-- Leaflet core -->
-<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <!-- Mapbox GL JS library -->
+  <script src="https://api.mapbox.com/mapbox-gl-js/v2.1.1/mapbox-gl.js"></script>
 
-<!-- Leaflet.heat heatmap plugin -->
-<script src="https://unpkg.com/leaflet.heat@0.2.0/dist/leaflet-heat.js"
-        onerror="console.warn('leaflet-heat failed to load; heatmap will use circle fallback')"></script>
+  <!-- App modules -->
+  <script src="/static/js/map.js"></script>
+  <script src="/static/js/dashboard.js"></script>
+  <script src="/static/js/app.js"></script>
 
-<!-- App modules -->
-<script src="/static/js/map.js"></script>
-<script src="/static/js/dashboard.js"></script>
-<script src="/static/js/app.js"></script>
-
-<!-- Initialize Lucide SVGs -->
-<script>
-  lucide.createIcons();
-</script>
+  <!-- Initialize Lucide SVGs -->
+  <script>
+    lucide.createIcons();
+  </script>
 </body>
+
 </html>

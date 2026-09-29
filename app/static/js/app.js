@@ -27,6 +27,7 @@ const AppState = {
   showNetwork: true,
 
   activeTab: 'recommend',
+  theme: localStorage.getItem('taxi_theme') || 'dark',
 };
 
 const DRIVER_PERSONAS = {
@@ -67,30 +68,121 @@ const $ = id => document.getElementById(id);
 
 // ─── Initialize App ────────────────────────────────────────────────────────────
 async function initApp() {
-  // Fetch configuration from backend
-  await fetchConfig();
+  try {
+    // Initialize Duo Mode Theme
+    initTheme();
 
-  // Init Leaflet map
-  MapModule.init(onMapClick, AppState.cartoApiKey);
+    // Fetch configuration from backend
+    await fetchConfig();
 
-  // UI control bindings
-  bindControls();
+    // Init Mapbox GL JS map (with initial theme)
+    MapModule.init(onMapClick, AppState.mapboxAccessToken);
+    if (AppState.theme === 'light') {
+      MapModule.setTheme('light');
+    }
 
-  // Tab switching
-  bindTabs();
+    // Mapbox bar controls (search & style toggles)
+    bindMapboxControls();
+
+    // UI control bindings
+    bindControls();
+
+    // Tab switching
+    bindTabs();
+  } catch (err) {
+    console.error("Error during initApp:", err);
+  }
 
   // Check server health and load map data
   await waitForServer();
+}
+
+// ─── Duo Mode Theme Controller ────────────────────────────────────────────────
+function initTheme() {
+  const savedTheme = localStorage.getItem('taxi_theme') || 'dark';
+  applyTheme(savedTheme, false);
+
+  const btnDark = $('theme-btn-dark');
+  const btnLight = $('theme-btn-light');
+
+  if (btnDark) {
+    btnDark.addEventListener('click', () => applyTheme('dark', true));
+  }
+  if (btnLight) {
+    btnLight.addEventListener('click', () => applyTheme('light', true));
+  }
+}
+
+function applyTheme(theme, updateMap = true) {
+  AppState.theme = theme;
+  document.documentElement.setAttribute('data-theme', theme);
+  localStorage.setItem('taxi_theme', theme);
+
+  const btnDark = $('theme-btn-dark');
+  const btnLight = $('theme-btn-light');
+  if (btnDark) {
+    btnDark.classList.toggle('active', theme === 'dark');
+    btnDark.setAttribute('aria-checked', theme === 'dark');
+  }
+  if (btnLight) {
+    btnLight.classList.toggle('active', theme === 'light');
+    btnLight.setAttribute('aria-checked', theme === 'light');
+  }
+
+  if (updateMap && typeof MapModule !== 'undefined' && typeof MapModule.setTheme === 'function') {
+    MapModule.setTheme(theme);
+  }
 }
 
 async function fetchConfig() {
   try {
     const resp = await fetch('/api/config');
     const data = await resp.json();
-    AppState.cartoApiKey = data.carto_api_key || '';
+    AppState.mapboxAccessToken = data.mapbox_access_token || '';
   } catch (err) {
     console.error("Failed to load frontend config:", err);
-    AppState.cartoApiKey = '';
+    AppState.mapboxAccessToken = '';
+  }
+}
+
+function bindMapboxControls() {
+  const inputGeocode = $('input-geocode');
+  const btnGeocode = $('btn-geocode');
+  if (btnGeocode && inputGeocode) {
+    const doSearch = async () => {
+      const q = inputGeocode.value.trim();
+      if (!q) return;
+      setStatus('loading', `Searching "${q}"...`);
+      const res = await MapModule.searchGeocode(q);
+      if (res) {
+        setStatus('ready', `Found: ${res.text || res.place_name}`);
+      } else {
+        setStatus('error', `Location not found`);
+      }
+    };
+    btnGeocode.addEventListener('click', doSearch);
+    inputGeocode.addEventListener('keydown', e => {
+      if (e.key === 'Enter') doSearch();
+    });
+  }
+
+  const btnDark = $('btn-style-dark');
+  const btnLight = $('btn-style-light');
+  const btnStreets = $('btn-style-streets');
+  if (btnDark) {
+    btnDark.addEventListener('click', () => {
+      MapModule.setStyle('dark');
+    });
+  }
+  if (btnLight) {
+    btnLight.addEventListener('click', () => {
+      MapModule.setStyle('light');
+    });
+  }
+  if (btnStreets) {
+    btnStreets.addEventListener('click', () => {
+      MapModule.setStyle('streets');
+    });
   }
 }
 
@@ -136,23 +228,26 @@ async function waitForServer() {
 }
 
 async function onDataReady() {
-  // Load map layers in parallel
-  const [edgeCount, hotspotCount] = await Promise.all([
-    MapModule.loadRoadNetwork(),
-    MapModule.loadHeatmap(),
-  ]);
+  try {
+    // Load map layers in parallel
+    const [edgeCount, hotspotCount] = await Promise.all([
+      MapModule.loadRoadNetwork(),
+      MapModule.loadHeatmap(),
+    ]);
 
-  // Load network summary for overview tab
-  Dashboard.loadNetworkSummary();
+    // Load network summary for overview tab
+    Dashboard.loadNetworkSummary();
 
-  // Hide loading overlay
-  $('map-loading').classList.add('hidden');
-
-  // Show instruction
-  const inst = document.querySelector('.map-instruction');
-  if (inst) inst.classList.remove('hidden');
-
-  console.log(`✅ Loaded ${edgeCount} road edges, ${hotspotCount} hotspot points`);
+    console.log(`✅ Loaded ${edgeCount} road edges, ${hotspotCount} hotspot points`);
+  } catch (err) {
+    console.warn("Layer loading warning:", err);
+  } finally {
+    // Always hide loading overlay
+    $('map-loading').classList.add('hidden');
+    const inst = document.querySelector('.map-instruction');
+    if (inst) inst.classList.remove('hidden');
+    if (MapModule.resize) MapModule.resize();
+  }
 }
 
 // ─── Map Click Handler ────────────────────────────────────────────────────────
