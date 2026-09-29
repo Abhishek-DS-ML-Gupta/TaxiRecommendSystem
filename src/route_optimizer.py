@@ -15,7 +15,7 @@ class RouteOptimizer:
         self.G = G
         self.tau = time_limit_tau
 
-    def RRS(self, current_node, current_time, pickup_probs, earnings, travel_times, depth=0):
+    def RRS(self, current_node, current_time, pickup_probs, earnings, travel_times, depth=0, visited=None):
         """
         Recursive Route Searching algorithm (Algorithm 1 in paper)
         Returns the optimal route R* and expected profit G*
@@ -26,13 +26,17 @@ class RouteOptimizer:
         earnings: dictionary mapping node -> expected earning (e_r)
         travel_times: dictionary mapping (u, v) -> travel time (t_r)
         """
-        # Base case: if we exceed time limit
-        if current_time >= self.tau or depth > 8: # Adding a depth limit to prevent infinite recursion
-            return [current_node], 0.0
+        if visited is None:
+            visited = set()
 
         p_r = pickup_probs.get(current_node, 0.0)
         e_r = earnings.get(current_node, 0.0)
-        
+
+        # Base case: if we exceed time limit or recursion depth limit
+        if current_time >= self.tau or depth >= 8:
+            return [current_node], p_r * e_r
+
+        new_visited = visited | {current_node}
         best_route = []
         best_future_profit = 0.0
         
@@ -42,7 +46,11 @@ class RouteOptimizer:
         if not neighbors:
             return [current_node], p_r * e_r
             
-        for neighbor in neighbors:
+        # Prioritize unvisited neighbors to prevent ping-pong 2-cycles
+        unvisited = [n for n in neighbors if n not in visited]
+        candidates = unvisited if unvisited else neighbors
+
+        for neighbor in candidates:
             t_r = travel_times.get((current_node, neighbor), 1.0) # default travel time 1.0
             
             # Recursive call
@@ -52,11 +60,15 @@ class RouteOptimizer:
                 pickup_probs, 
                 earnings, 
                 travel_times, 
-                depth + 1
+                depth + 1,
+                new_visited
             )
             
-            if child_profit > best_future_profit:
-                best_future_profit = child_profit
+            discount = 0.5 if neighbor in visited else 1.0
+            discounted_profit = child_profit * discount
+
+            if discounted_profit > best_future_profit or not best_route:
+                best_future_profit = discounted_profit
                 best_route = child_route
                 
         # Bellman equation: G*(r) = p_r * e_r + (1 - p_r) * max G*(r')

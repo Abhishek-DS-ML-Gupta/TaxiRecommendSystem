@@ -4,15 +4,22 @@
  */
 
 // ─── App State ────────────────────────────────────────────────────────────────
+// ─── App State ────────────────────────────────────────────────────────────────
 const AppState = {
   clickedLat: null,
   clickedLon: null,
   currentRecommendations: [],
+  currentParetoAlternatives: null,
+  currentMultiObjectiveSummary: null,
+  currentLlmExplanation: null,
   isLoading: false,
   selectedTaxiIdx: 0,
   dataReady: false,
 
   // Controls
+  algorithm: 'mora_llm',
+  driverProfileId: 'new_driver_cold_start',
+  alpha: 0.20,
   timeLimit: 10,
   numTaxis: 1,
   scenario: 'normal',
@@ -20,6 +27,39 @@ const AppState = {
   showNetwork: true,
 
   activeTab: 'recommend',
+};
+
+const DRIVER_PERSONAS = {
+  new_driver_cold_start: {
+    tag: 'COLD START · 0 PRIOR TRIPS',
+    tagClass: 'cold-start',
+    desc: 'Newly onboarded taxi driver with minimal trip history. Unfamiliar with peak passenger clusters. Needs safe, reliable, high-probability pickup corridors along arterial roads rather than high-risk speculative cruising.',
+    zones: 'Commercial, Residential'
+  },
+  experienced_veteran: {
+    tag: 'VETERAN · 12 YEARS EXP',
+    tagClass: 'veteran',
+    desc: 'Highly experienced driver with deep knowledge of Beijing dispatch dynamics. Specializes in rapid CBD drop-offs and high-fare airport corridors.',
+    zones: 'CBD, Commercial, Transport Hub'
+  },
+  night_shift_cruiser: {
+    tag: 'NIGHT CRUISE SPECIALIST',
+    tagClass: 'veteran',
+    desc: 'Specializes in late-night and early-morning shifts. Targets late-night entertainment districts, karaoke strips, and midnight rail interchanges.',
+    zones: 'Entertainment, Transport Hub'
+  },
+  airport_express: {
+    tag: 'LONG HAUL TRANSIT',
+    tagClass: 'veteran',
+    desc: 'Prefers high-speed, long-distance inter-district trips connecting Beijing Capital Airport and high-speed rail hubs.',
+    zones: 'Transport Hub, Expressway'
+  },
+  low_carbon_eco: {
+    tag: 'ECO CRUISER · FUEL SAVER',
+    tagClass: 'veteran',
+    desc: 'Focuses on fuel efficiency and smooth driving profiles. Avoids congested choke points, preferring free-flowing ring-road arterials.',
+    zones: 'Arterial, Residential'
+  }
 };
 
 // ─── DOM References ────────────────────────────────────────────────────────────
@@ -141,7 +181,8 @@ async function requestRecommendation() {
   $('btn-recommend').innerHTML = '<i data-lucide="loader" class="lucide-spin" style="margin-right:6px"></i> Computing Route...';
   if (window.lucide) lucide.createIcons();
 
-  setStatus('loading', 'Running RRS algorithm...');
+  const algoLabel = AppState.algorithm.startsWith('mora') ? 'MORA-LLM Multi-Objective Engine' : 'Route Optimizer';
+  setStatus('loading', `Running ${algoLabel}...`);
 
   try {
     const payload = {
@@ -150,6 +191,9 @@ async function requestRecommendation() {
       time_limit: AppState.timeLimit,
       num_taxis: AppState.numTaxis,
       scenario: AppState.scenario,
+      algorithm: AppState.algorithm,
+      driver_profile_id: AppState.driverProfileId,
+      alpha: AppState.alpha,
     };
 
     const resp = await fetch('/api/recommend', {
@@ -165,21 +209,21 @@ async function requestRecommendation() {
 
     const data = await resp.json();
     AppState.currentRecommendations = data.recommendations;
+    AppState.currentParetoAlternatives = data.pareto_alternatives;
+    AppState.currentMultiObjectiveSummary = data.multi_objective_summary;
+    AppState.currentLlmExplanation = data.llm_explanation;
 
-    // Update map
+    const accuracyBtn = $('btn-accuracy');
+    if (accuracyBtn) accuracyBtn.disabled = data.recommendations.length === 0;
+
+    // Update map with primary route
     MapModule.drawRoutes(data.recommendations);
 
-    // Update dashboard
-    Dashboard.updateMetrics(data.recommendations);
+    // Update dashboard metrics and MORA-LLM cards
+    Dashboard.updateMetrics(data.recommendations, data.algorithm, data.multi_objective_summary);
+    Dashboard.renderMoraObjectives(data.multi_objective_summary, data.pareto_alternatives, onParetoSelected);
+    Dashboard.renderLLMExplanation(data.llm_explanation);
     Dashboard.renderTaxiList(data.recommendations, onTaxiSelected);
-
-    // Update algo badge
-    const algoEl = $('algo-badge');
-    if (algoEl) {
-      algoEl.innerHTML = data.recommendations.length > 1 ? '<i data-lucide="zap" style="margin-right:4px"></i> SRRS Algorithm' : '<i data-lucide="search" style="margin-right:4px"></i> RRS Algorithm';
-      algoEl.title = data.algorithm || '';
-      if (window.lucide) lucide.createIcons();
-    }
 
     setStatus('ready', `✓ Route ready · ${data.recommendations.length} taxi${data.recommendations.length > 1 ? 's' : ''}`);
   } catch (err) {
@@ -194,14 +238,121 @@ async function requestRecommendation() {
   }
 }
 
+// ─── Pareto Front Alternative Handler ─────────────────────────────────────────
+function onParetoSelected(altKey) {
+  if (!AppState.currentParetoAlternatives || !AppState.currentParetoAlternatives[altKey]) return;
+  const alt = AppState.currentParetoAlternatives[altKey];
+
+  const altRec = {
+    taxi_id: alt.label,
+    route: alt.route_points,
+    total_expected_earning: alt.profit,
+    route_length_segments: alt.route_points.length,
+    estimated_time_minutes: alt.route_points.length * 0.8,
+    novelty_score: alt.novelty,
+    topic_diversity_score: alt.diversity,
+  };
+
+  MapModule.drawRoutes([altRec]);
+
+  // Animate metrics for this alternative
+  const earnEl = $('metric-earning');
+  if (earnEl) Dashboard.animateCount(earnEl, alt.profit, '¥', '', 2);
+  const segEl = $('metric-segments');
+  if (segEl) Dashboard.animateCount(segEl, alt.route_points.length, '', ' segs', 0);
+
+  // Update algo badge
+  const algoEl = $('algo-badge');
+  if (algoEl) {
+    algoEl.innerHTML = `<i data-lucide="compass" style="margin-right:4px"></i> Pareto: ${alt.label}`;
+    if (window.lucide) lucide.createIcons();
+  }
+}
+
 // ─── Taxi Selection from List ─────────────────────────────────────────────────
 function onTaxiSelected(idx) {
   AppState.selectedTaxiIdx = idx;
-  // Re-draw with selected taxi highlighted (handled by CSS active class in dashboard)
+  // Focus on selected taxi's route
+  if (AppState.currentRecommendations[idx]) {
+    const singleRec = AppState.currentRecommendations[idx];
+    const earnEl = $('metric-earning');
+    if (earnEl) Dashboard.animateCount(earnEl, singleRec.total_expected_earning, '¥', '', 2);
+    const segEl = $('metric-segments');
+    if (segEl) Dashboard.animateCount(segEl, singleRec.route_length_segments, '', ' segs', 0);
+  }
 }
 
 // ─── Control Bindings ─────────────────────────────────────────────────────────
 function bindControls() {
+  // Algorithm buttons
+  document.querySelectorAll('.algo-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      document.querySelectorAll('.algo-btn').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      AppState.algorithm = btn.dataset.algo;
+
+      const valAlgo = $('val-algorithm');
+      const personaGrp = $('group-driver-persona');
+      const alphaGrp = $('group-alpha');
+      const moraCard = $('mora-objectives-card');
+      const xaiCard = $('llm-explanation-card');
+
+      if (AppState.algorithm === 'mora_llm') {
+        if (valAlgo) valAlgo.textContent = 'MORA-LLM (2026)';
+        if (personaGrp) personaGrp.style.display = 'block';
+        if (alphaGrp) alphaGrp.style.display = 'block';
+      } else if (AppState.algorithm === 'srrs') {
+        if (valAlgo) valAlgo.textContent = 'SRRS (Multi-Taxi)';
+        if (personaGrp) personaGrp.style.display = 'none';
+        if (alphaGrp) alphaGrp.style.display = 'none';
+        if (moraCard) moraCard.style.display = 'none';
+        if (xaiCard) xaiCard.style.display = 'none';
+        if (AppState.numTaxis === 1) {
+          AppState.numTaxis = 3;
+          $('slider-num-taxis').value = '3';
+          $('val-num-taxis').textContent = '3 (SRRS)';
+        }
+      } else if (AppState.algorithm === 'rrs') {
+        if (valAlgo) valAlgo.textContent = 'RRS (Single Taxi)';
+        if (personaGrp) personaGrp.style.display = 'none';
+        if (alphaGrp) alphaGrp.style.display = 'none';
+        if (moraCard) moraCard.style.display = 'none';
+        if (xaiCard) xaiCard.style.display = 'none';
+        AppState.numTaxis = 1;
+        $('slider-num-taxis').value = '1';
+        $('val-num-taxis').textContent = '1 (RRS)';
+      }
+    });
+  });
+
+  // Driver Persona selector
+  const personaSelect = $('select-driver-persona');
+  if (personaSelect) {
+    personaSelect.addEventListener('change', e => {
+      AppState.driverProfileId = e.target.value;
+      const meta = DRIVER_PERSONAS[AppState.driverProfileId];
+      const card = $('driver-persona-card');
+      if (card && meta) {
+        card.innerHTML = `
+          <div class="driver-tag ${meta.tagClass}"><i data-lucide="snowflake" style="width:12px;height:12px"></i> ${meta.tag}</div>
+          <div class="driver-desc">${meta.desc}</div>
+          <div class="driver-zones"><b>Affinities:</b> ${meta.zones}</div>
+        `;
+        if (window.lucide) lucide.createIcons();
+      }
+    });
+  }
+
+  // Alpha slider
+  const alphaSlider = $('slider-alpha');
+  const alphaVal = $('val-alpha');
+  if (alphaSlider) {
+    alphaSlider.addEventListener('input', e => {
+      AppState.alpha = parseFloat(e.target.value);
+      if (alphaVal) alphaVal.textContent = AppState.alpha.toFixed(2);
+    });
+  }
+
   // Time limit slider
   const timeLimitSlider = $('slider-time-limit');
   const timeLimitVal = $('val-time-limit');
@@ -218,7 +369,8 @@ function bindControls() {
   if (taxiSlider) {
     taxiSlider.addEventListener('input', e => {
       AppState.numTaxis = parseInt(e.target.value);
-      taxiVal.textContent = AppState.numTaxis + (AppState.numTaxis > 1 ? ' (SRRS)' : ' (RRS)');
+      const tag = AppState.algorithm.startsWith('mora') ? ' (MORA)' : (AppState.numTaxis > 1 ? ' (SRRS)' : ' (RRS)');
+      taxiVal.textContent = AppState.numTaxis + tag;
     });
   }
 
@@ -243,16 +395,30 @@ function bindControls() {
     clearBtn.addEventListener('click', () => {
       MapModule.clearRoutes();
       AppState.currentRecommendations = [];
+      AppState.currentParetoAlternatives = null;
+      AppState.currentMultiObjectiveSummary = null;
+      AppState.currentLlmExplanation = null;
       AppState.clickedLat = null;
       AppState.clickedLon = null;
       Dashboard.renderTaxiList([], null);
+      Dashboard.renderMoraObjectives(null);
+      Dashboard.renderLLMExplanation(null);
       // Reset metrics
       ['metric-earning', 'metric-segments', 'metric-time', 'metric-taxis'].forEach(id => {
         const el = $(id);
         if (el) { el.textContent = '—'; el.dataset.current = '0'; }
       });
+      const accuracyBtn = $('btn-accuracy');
+      if (accuracyBtn) accuracyBtn.disabled = true;
+      const accuracyPanel = $('accuracy-panel');
+      if (accuracyPanel) accuracyPanel.style.display = 'none';
       document.querySelector('.map-instruction')?.classList.remove('hidden');
     });
+  }
+
+  const accuracyBtn = $('btn-accuracy');
+  if (accuracyBtn) {
+    accuracyBtn.addEventListener('click', checkRecommendationAccuracy);
   }
 
   // Heatmap toggle
@@ -271,6 +437,34 @@ function bindControls() {
       AppState.showNetwork = e.target.checked;
       MapModule.toggleNetwork(e.target.checked);
     });
+  }
+}
+
+async function checkRecommendationAccuracy() {
+  if (AppState.currentRecommendations.length === 0) return;
+
+  const panel = $('accuracy-panel');
+  const result = $('accuracy-result');
+  if (panel) panel.style.display = 'block';
+  if (result) result.textContent = 'Checking historical pickup records...';
+
+  try {
+    const resp = await fetch('/api/recommend/accuracy', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ recommendations: AppState.currentRecommendations }),
+    });
+    const data = await resp.json();
+    if (!resp.ok || !data.available) throw new Error(data.message || 'Accuracy data unavailable');
+    result.innerHTML = `
+      <div>${data.message}</div>
+      <div>Segments evaluated: <b>${data.segments_evaluated}</b></div>
+      <div>Mean absolute error: <b>${data.mean_absolute_error.toFixed(4)}</b></div>
+      <div>Brier score: <b>${data.brier_score.toFixed(4)}</b></div>
+      <div>Predicted vs historical pickup rate: <b>${(data.predicted_pickup_rate * 100).toFixed(1)}%</b> vs <b>${(data.historical_pickup_rate * 100).toFixed(1)}%</b></div>
+      <div>Estimated route success: <b>${(data.estimated_route_success_rate * 100).toFixed(1)}%</b></div>`;
+  } catch (err) {
+    if (result) result.textContent = err.message || 'Accuracy check failed.';
   }
 }
 

@@ -68,8 +68,66 @@
     <div class="tab-panel" data-panel="recommend" style="display:flex;flex-direction:column">
 
       <!-- Controls Section -->
+      <!-- Controls Section -->
       <div class="panel-section">
         <div class="section-title">Route Parameters</div>
+
+        <!-- Algorithm Selector -->
+        <div class="control-group">
+          <div class="control-label">
+            <span>Algorithm</span>
+            <span class="control-value" id="val-algorithm" style="color:var(--teal)">MORA-LLM (2026)</span>
+          </div>
+          <div class="algo-grid">
+            <button class="algo-btn active" data-algo="mora_llm" id="algo-mora">
+              <i data-lucide="brain"></i> MORA-LLM
+            </button>
+            <button class="algo-btn" data-algo="srrs" id="algo-srrs">
+              <i data-lucide="zap"></i> SRRS
+            </button>
+            <button class="algo-btn" data-algo="rrs" id="algo-rrs">
+              <i data-lucide="search"></i> RRS
+            </button>
+          </div>
+          <div style="margin-top:6px">
+            <select id="select-ablation" class="custom-select" style="display:none;width:100%;font-size:11px;">
+              <option value="mora_llm">MORA-LLM (Full: LEPS + LES + LLM Reasoning)</option>
+              <option value="mora_wollm">MORA-LLM(-WOLLM) (Ablation without LLM)</option>
+              <option value="mora_wom">MORA-LLM(-WOM) (Ablation without Mutation)</option>
+              <option value="mora_woq">MORA-LLM(-WOQ) (Ablation without Query)</option>
+            </select>
+          </div>
+        </div>
+
+        <!-- Driver Persona (MORA-LLM) -->
+        <div class="control-group" id="group-driver-persona">
+          <div class="control-label">
+            <span>Driver Persona (Cold-Start Alleviation)</span>
+          </div>
+          <select id="select-driver-persona" class="custom-select" style="width:100%">
+            <option value="new_driver_cold_start">Alex Zhang (New Driver · Cold Start ❄️)</option>
+            <option value="experienced_veteran">Master Wang (12-yr Veteran · CBD Specialist 🎖️)</option>
+            <option value="night_shift_cruiser">Sarah Liu (Night Shift Cruiser · Surge Seeker 🌙)</option>
+            <option value="airport_express">Li Na (Airport Express · Long Haul Transit ✈️)</option>
+            <option value="low_carbon_eco">Chen Wei (Eco Cruiser · Anti-Idling Arterials 🍃)</option>
+          </select>
+          <div id="driver-persona-card" class="driver-persona-card">
+            <div class="driver-tag cold-start"><i data-lucide="snowflake" style="width:12px;height:12px"></i> COLD START · 0 PRIOR TRIPS</div>
+            <div class="driver-desc">Newly onboarded taxi driver with minimal trip history. Unfamiliar with peak passenger clusters. Needs safe, reliable, high-probability pickup corridors along arterial roads rather than high-risk speculative cruising.</div>
+            <div class="driver-zones"><b>Affinities:</b> Commercial, Residential</div>
+          </div>
+        </div>
+
+        <!-- Alpha Parameter Slider (Eq. 8) -->
+        <div class="control-group" id="group-alpha">
+          <div class="control-label">
+            <span>Dynamic Score Factor (α)</span>
+            <span class="control-value" id="val-alpha">0.20</span>
+          </div>
+          <input type="range" id="slider-alpha"
+                 min="0.0" max="1.0" step="0.05" value="0.20"
+                 aria-label="Dynamic score correction parameter alpha" />
+        </div>
 
         <!-- Time Limit Slider -->
         <div class="control-group">
@@ -86,7 +144,7 @@
         <div class="control-group">
           <div class="control-label">
             <span>Number of Taxis</span>
-            <span class="control-value" id="val-num-taxis">1 (RRS)</span>
+            <span class="control-value" id="val-num-taxis">1 (MORA)</span>
           </div>
           <input type="range" id="slider-num-taxis"
                  min="1" max="8" step="1" value="1"
@@ -127,15 +185,23 @@
         <button id="btn-recommend" aria-label="Get route recommendation">
           <i data-lucide="car" style="margin-right:6px"></i> Get Route
         </button>
+        <button id="btn-accuracy" class="btn-secondary" aria-label="Check recommendation accuracy" disabled>
+          <i data-lucide="badge-check" style="margin-right:6px"></i> Check Accuracy
+        </button>
         <button id="btn-clear" class="btn-secondary" aria-label="Clear routes">
           <i data-lucide="x" style="margin-right:4px"></i> Clear
         </button>
       </div>
 
+      <div class="panel-section" id="accuracy-panel" style="display:none">
+        <div class="section-title">Recommendation Accuracy</div>
+        <div id="accuracy-result" style="font-size:12px;color:var(--text-secondary);line-height:1.7"></div>
+      </div>
+
       <!-- Metrics Section -->
       <div class="panel-section">
         <div class="section-title">Results</div>
-        <div class="algo-badge" id="algo-badge">RRS Algorithm</div>
+        <div class="algo-badge" id="algo-badge">MORA-LLM Algorithm</div>
         <div class="metrics-grid">
           <div class="metric-card">
             <div class="metric-label">Expected Earning</div>
@@ -157,6 +223,56 @@
             <div class="metric-value purple" id="metric-taxis">—</div>
             <div class="metric-sub">recommended</div>
           </div>
+        </div>
+
+        <!-- Multi-Objective Breakdown (MORA-LLM) -->
+        <div id="mora-objectives-card" class="mora-objectives-card" style="display:none">
+          <div class="mora-header">
+            <span><i data-lucide="sparkles" style="width:14px;height:14px;color:var(--teal)"></i> Multi-Objective Pareto Metrics</span>
+            <span class="mora-tag" id="mora-variant-tag">IEEE TEVC 2026</span>
+          </div>
+          <div class="mora-grid">
+            <div class="mora-item">
+              <span class="mora-label">Profit (f1)</span>
+              <span class="mora-val teal" id="mora-f1-val">—</span>
+            </div>
+            <div class="mora-item">
+              <span class="mora-label">Novelty (f2)</span>
+              <span class="mora-val amber" id="mora-f2-val">—</span>
+            </div>
+            <div class="mora-item">
+              <span class="mora-label">Diversity (f3)</span>
+              <span class="mora-val green" id="mora-f3-val">—</span>
+            </div>
+            <div class="mora-item">
+              <span class="mora-label">SDE Fitness</span>
+              <span class="mora-val purple" id="mora-sde-val">—</span>
+            </div>
+          </div>
+          
+          <!-- Pareto Front Switcher -->
+          <div class="pareto-switcher" id="pareto-switcher" style="display:none">
+            <div class="pareto-title">Pareto Front Alternatives:</div>
+            <div class="pareto-pills">
+              <button class="pareto-pill active" data-alt="balanced" id="pill-balanced">🎯 Balanced</button>
+              <button class="pareto-pill" data-alt="max_profit" id="pill-max-profit">💰 Max Profit</button>
+              <button class="pareto-pill" data-alt="max_exploration" id="pill-max-novelty">🧭 Max Novelty</button>
+            </div>
+          </div>
+        </div>
+
+        <!-- LLM Explainability Card -->
+        <div id="llm-explanation-card" class="llm-explanation-card" style="display:none">
+          <div class="xai-header">
+            <i data-lucide="bot" style="width:16px;height:16px;color:#00d4ff"></i>
+            <span>AI Reasoning & Explainability (NLG)</span>
+          </div>
+          <div class="xai-quote" id="xai-summary-text">—</div>
+          <div class="xai-steps-toggle" id="xai-steps-toggle">
+            <span>View Step-by-Step AI Rationale</span>
+            <i data-lucide="chevron-down" style="width:14px;height:14px"></i>
+          </div>
+          <div class="xai-steps-list" id="xai-steps-list" style="display:none"></div>
         </div>
       </div>
 

@@ -14,10 +14,70 @@ import numpy as np
 
 router = APIRouter()
 
-_RESULTS_CSV = os.path.join(
-    os.path.dirname(__file__), '..', '..', 'results',
-    'summary_result_of_gcn_lstm_split.csv'
+_PROJECT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..'))
+_RESULTS_FILENAMES = (
+    'summary_result_of_gcn_lstm_split.csv',
+    'summary_result_of_gcn_lstm.csv',
 )
+
+
+def _find_results_csv():
+    """Find the optional experiment output without depending on the cwd."""
+    candidates = [
+        os.path.join(_PROJECT_ROOT, 'results', filename)
+        for filename in _RESULTS_FILENAMES
+    ]
+    candidates.extend(
+        os.path.join(_PROJECT_ROOT, 'data', 'results', filename)
+        for filename in _RESULTS_FILENAMES
+    )
+    return next((path for path in candidates if os.path.isfile(path)), None)
+
+
+def _historical_data_summary() -> Dict[str, Any]:
+    """Build a truthful fallback from the pickup observations shipped with the app."""
+    props_path = os.path.join(_PROJECT_ROOT, 'data', 'network_properties.csv')
+    if not os.path.isfile(props_path):
+        return {
+            "available": False,
+            "message": "Neither experiment results nor network_properties.csv is available.",
+        }
+
+    columns = [
+        'source_id', 'target_id', 'src_lat', 'src_lon', 'tgt_lat', 'tgt_lon',
+        'pickup_count', 'taxi_count', 'pickup_prob', 'expected_earning'
+    ]
+    df = pd.read_csv(props_path, header=None, names=columns)
+    pickup_count = pd.to_numeric(df['pickup_count'], errors='coerce').fillna(0)
+    taxi_count = pd.to_numeric(df['taxi_count'], errors='coerce').fillna(0)
+    valid = taxi_count > 0
+    observed_rates = (pickup_count[valid] / taxi_count[valid]).clip(0, 1)
+    total_taxis = float(taxi_count[valid].sum())
+    total_pickups = float(pickup_count[valid].sum())
+    weighted_pickup_rate = float(np.average(
+        observed_rates,
+        weights=taxi_count[valid],
+    )) if total_taxis else 0.0
+
+    return {
+        "available": True,
+        "fallback": True,
+        "message": "Experiment CSV is not included. Showing historical pickup data instead.",
+        "historical_summary": {
+            "segments_with_observations": int(valid.sum()),
+            "mean_pickup_rate": round(float(observed_rates.mean()), 4),
+            "overall_pickup_rate": round(weighted_pickup_rate, 4),
+            "total_pickups": int(total_pickups),
+            "total_taxi_observations": int(total_taxis),
+        },
+        "paper": {
+            "title": "A Cost-Effective Sequential Route Recommender System for Taxi Drivers",
+            "authors": "Liu, Teng, Chen, Xiong",
+            "journal": "INFORMS Journal on Computing",
+            "year": 2023,
+            "doi": "10.1287/ijoc.2021.0112"
+        }
+    }
 
 
 def _load_results_df() -> pd.DataFrame:
@@ -27,7 +87,12 @@ def _load_results_df() -> pd.DataFrame:
     which causes field-count mismatches with the C parser. We use the
     Python engine with quotechar handling and skip bad lines as a fallback.
     """
-    csv_path = os.path.abspath(_RESULTS_CSV)
+    csv_path = _find_results_csv()
+    if csv_path is None:
+        raise FileNotFoundError(
+            'No GCN-LSTM experiment CSV was found. Run the experiment that '
+            'generates summary_result_of_gcn_lstm_split.csv, then reload Model Stats.'
+        )
 
     # Try with Python engine first (handles quoted lists correctly)
     try:
@@ -70,9 +135,9 @@ async def get_model_stats() -> Dict[str, Any]:
     Returns aggregated model performance statistics from the
     GCN-LSTM hyperparameter search results (246 experiment runs).
     """
-    csv_path = os.path.abspath(_RESULTS_CSV)
-    if not os.path.exists(csv_path):
-        return {"available": False, "message": f"Results CSV not found at {csv_path}"}
+    csv_path = _find_results_csv()
+    if csv_path is None:
+        return _historical_data_summary()
 
     try:
         df = _load_results_df()

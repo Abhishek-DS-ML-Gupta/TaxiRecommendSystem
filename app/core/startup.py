@@ -21,6 +21,7 @@ sys.path.insert(0, os.path.abspath(_SRC_DIR))
 
 from data_processor import DataProcessor
 from route_optimizer import RouteOptimizer
+from mora_llm import MORARouteOptimizer, list_all_driver_profiles
 
 # ─── Global app state (populated at startup) ────────────────────────────────
 
@@ -29,15 +30,18 @@ app_state = {
     "edges_df": None,        # road segments DataFrame
     "vertices_df": None,     # intersections DataFrame
     "route_G": None,         # routing graph (segment→segment)
-    "optimizer": None,       # RouteOptimizer instance
+    "optimizer": None,       # RouteOptimizer instance (RRS/SRRS)
+    "mora_optimizer": None,  # MORARouteOptimizer instance (MORA-LLM Multi-Objective)
     "pickup_probs": None,    # {edge_id → float}
     "earnings": None,        # {edge_id → float}
+    "taxi_counts": None,     # {edge_id → int}
     "travel_times": None,    # {(u,v) → float}
     "node_coords": None,     # {node_id → (lat, lon)}
     "edge_coords": None,     # {edge_id → (lat, lon)} midpoint of each segment
     "network_props": None,   # raw network_properties DataFrame
     "valid_start_nodes": [],
     "top_hotspots": [],      # top-100 pickup probability hotspots
+    "driver_profiles": [],   # available driver personas
     "loaded": False,
 }
 
@@ -89,6 +93,7 @@ def load_all(data_dir: str = None, time_limit_tau: float = 10.0):
     # 4. Build pickup_probs and earnings per road segment
     pickup_probs = {}
     earnings = {}
+    taxi_counts = {}
     edge_coords = {}  # midpoint of each edge
 
     if network_props is not None:
@@ -99,6 +104,7 @@ def load_all(data_dir: str = None, time_limit_tau: float = 10.0):
             tgt = int(row['target_id'])
             prob = float(row['pickup_prob']) if not pd.isna(row['pickup_prob']) else 0.0
             earn = float(row['expected_earning']) if not pd.isna(row['expected_earning']) else 0.0
+            tcnt = int(row['taxi_count']) if not pd.isna(row['taxi_count']) else 1
             # mid-lat/lon
             mid_lat = (float(row['src_lat']) + float(row['tgt_lat'])) / 2.0
             mid_lon = (float(row['src_lon']) + float(row['tgt_lon'])) / 2.0
@@ -109,8 +115,9 @@ def load_all(data_dir: str = None, time_limit_tau: float = 10.0):
             matched = edges_df.loc[mask, 'edge_id']
             if len(matched) > 0:
                 eid = int(matched.iloc[0])
-                pickup_probs[eid] = min(max(prob, 0.0), 1.0)
-                earnings[eid] = max(earn, 0.0)
+                pickup_probs[eid] = min(max(prob, 0.05), 0.95)
+                earnings[eid] = earn if earn > 0.0 else float(np.random.uniform(22.0, 42.0))
+                taxi_counts[eid] = max(tcnt, 1)
                 edge_coords[eid] = (mid_lat, mid_lon)
     else:
         print("[startup] network_properties.csv not found, using simulated probabilities")
@@ -122,8 +129,12 @@ def load_all(data_dir: str = None, time_limit_tau: float = 10.0):
         src = int(row['source_id'])
         tgt = int(row['target_id'])
         if eid not in pickup_probs:
-            pickup_probs[eid] = float(np.random.uniform(0.05, 0.4))
-            earnings[eid] = float(np.random.uniform(10.0, 50.0))
+            pickup_probs[eid] = float(np.random.uniform(0.08, 0.45))
+            earnings[eid] = float(np.random.uniform(18.0, 45.0))
+        elif earnings[eid] <= 0:
+            earnings[eid] = float(np.random.uniform(22.0, 42.0))
+        if eid not in taxi_counts:
+            taxi_counts[eid] = int(np.random.poisson(2) + 1)
         if eid not in edge_coords:
             src_c = node_coords.get(src, (39.9, 116.4))
             tgt_c = node_coords.get(tgt, (39.9, 116.4))
@@ -161,18 +172,33 @@ def load_all(data_dir: str = None, time_limit_tau: float = 10.0):
 
     print(f"[startup] Routing graph: {route_G.number_of_nodes()} segment nodes, {route_G.number_of_edges()} transitions")
 
-    # 6. Build optimizer
+    # 6. Build classical optimizer (RRS/SRRS)
     optimizer = RouteOptimizer(route_G, time_limit_tau=time_limit_tau)
 
-    # 7. Valid starting nodes (have outgoing edges)
+    # 7. Build MORA-LLM Multi-Objective Evolutionary Optimizer
+    print("[startup] Initializing MORA-LLM Multi-Objective Evolutionary Engine...")
+    mora_optimizer = MORARouteOptimizer(
+        route_G=route_G,
+        time_limit_tau=time_limit_tau,
+        pop_size=25,
+        max_gen=20,
+        k_length=8,
+        llm_cycle=5,
+        alpha=0.2,
+        variant="MORA-LLM"
+    )
+
+    # 8. Valid starting nodes (have outgoing edges)
     valid_start_nodes = [n for n, deg in route_G.out_degree() if deg > 0]
 
-    # 8. Top hotspots for heatmap (top 200 by pickup probability)
+    # 9. Top hotspots for heatmap (top 200 by pickup probability)
     top_hotspots = sorted(
         [(eid, pickup_probs[eid], edge_coords.get(eid, (0, 0))) for eid in pickup_probs],
         key=lambda x: x[1],
         reverse=True
     )[:200]
+
+    driver_profiles = list_all_driver_profiles()
 
     # Populate global state
     app_state.update({
@@ -181,16 +207,19 @@ def load_all(data_dir: str = None, time_limit_tau: float = 10.0):
         "vertices_df": vertices_df,
         "route_G": route_G,
         "optimizer": optimizer,
+        "mora_optimizer": mora_optimizer,
         "pickup_probs": pickup_probs,
         "earnings": earnings,
+        "taxi_counts": taxi_counts,
         "travel_times": travel_times,
         "node_coords": node_coords,
         "edge_coords": edge_coords,
         "network_props": network_props,
         "valid_start_nodes": valid_start_nodes,
         "top_hotspots": top_hotspots,
+        "driver_profiles": driver_profiles,
         "loaded": True,
     })
 
-    print("[startup] All data loaded and ready.")
+    print("[startup] All data and MORA-LLM engine loaded and ready.")
     return app_state

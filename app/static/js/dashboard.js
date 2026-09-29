@@ -26,7 +26,8 @@ const Dashboard = (() => {
   }
 
   // ─── Update Metric Cards ───────────────────────────────────────────────────
-  function updateMetrics(recommendations) {
+  // ─── Update Metric Cards ───────────────────────────────────────────────────
+  function updateMetrics(recommendations, algorithmName, moSummary) {
     if (!recommendations || recommendations.length === 0) return;
 
     const primaryRec = recommendations[0];
@@ -43,18 +44,121 @@ const Dashboard = (() => {
     const timeEl = document.getElementById('metric-time');
     if (timeEl) animateCount(timeEl, primaryRec.estimated_time_minutes, '', ' min', 1);
 
-    // Num taxis
+    // Num taxis or SDE fitness
     const taxiEl = document.getElementById('metric-taxis');
-    if (taxiEl) animateCount(taxiEl, recommendations.length, '', '', 0);
+    if (taxiEl) {
+      if (primaryRec.sde_fitness !== undefined && primaryRec.sde_fitness !== null) {
+        animateCount(taxiEl, primaryRec.sde_fitness, '', ' fit', 2);
+        const taxiSub = taxiEl.parentElement.querySelector('.metric-sub');
+        if (taxiSub) taxiSub.textContent = 'Pareto SDE';
+      } else {
+        animateCount(taxiEl, recommendations.length, '', '', 0);
+        const taxiSub = taxiEl.parentElement.querySelector('.metric-sub');
+        if (taxiSub) taxiSub.textContent = 'recommended';
+      }
+    }
 
     // Algorithm badge
     const algoEl = document.getElementById('algo-badge');
-    if (algoEl && recommendations.length > 0) {
-      // Show RRS vs SRRS
-      const algoText = recommendations.length === 1 ? 'RRS Algorithm' : 'SRRS Algorithm';
-      algoEl.textContent = algoText;
-      algoEl.title = primaryRec.algorithm || '';
+    if (algoEl) {
+      const name = algorithmName || primaryRec.algorithm || 'Route Optimizer';
+      let icon = 'search';
+      if (name.includes('MORA')) icon = 'brain';
+      else if (name.includes('SRRS') || recommendations.length > 1) icon = 'zap';
+      algoEl.innerHTML = `<i data-lucide="${icon}" style="margin-right:4px"></i> ${name}`;
+      algoEl.title = name;
+      if (window.lucide) lucide.createIcons();
     }
+  }
+
+  // ─── Render MORA Multi-Objective Metrics & Pareto Switcher ───────────────
+  function renderMoraObjectives(moSummary, paretoAlts, onParetoCallback) {
+    const card = document.getElementById('mora-objectives-card');
+    const switcher = document.getElementById('pareto-switcher');
+    if (!card) return;
+
+    if (!moSummary) {
+      card.style.display = 'none';
+      if (switcher) switcher.style.display = 'none';
+      return;
+    }
+
+    card.style.display = 'block';
+
+    const f1El = document.getElementById('mora-f1-val');
+    const f2El = document.getElementById('mora-f2-val');
+    const f3El = document.getElementById('mora-f3-val');
+    const sdeEl = document.getElementById('mora-sde-val');
+    const tagEl = document.getElementById('mora-variant-tag');
+
+    if (f1El) f1El.textContent = `¥${moSummary.expected_profit.toFixed(2)}`;
+    if (f2El) f2El.textContent = moSummary.novelty.toFixed(3);
+    if (f3El) f3El.textContent = moSummary.diversity.toFixed(3);
+    if (sdeEl) sdeEl.textContent = moSummary.sde_fitness.toFixed(3);
+    if (tagEl) {
+      tagEl.textContent = moSummary.is_cold_start ? 'LEPS COLD START' : 'IEEE TEVC 2026';
+      tagEl.style.color = moSummary.is_cold_start ? '#00d4ff' : 'var(--teal)';
+    }
+
+    // Render Pareto alternatives if available
+    if (paretoAlts && Object.keys(paretoAlts).length > 0 && switcher) {
+      switcher.style.display = 'block';
+      document.querySelectorAll('.pareto-pill').forEach(btn => {
+        btn.onclick = () => {
+          document.querySelectorAll('.pareto-pill').forEach(b => b.classList.remove('active'));
+          btn.classList.add('active');
+          const altKey = btn.dataset.alt;
+          if (onParetoCallback) onParetoCallback(altKey);
+        };
+      });
+    } else if (switcher) {
+      switcher.style.display = 'none';
+    }
+  }
+
+  // ─── Render LLM Explainability Rationale ─────────────────────────────────
+  function renderLLMExplanation(llmExp) {
+    const card = document.getElementById('llm-explanation-card');
+    if (!card) return;
+
+    if (!llmExp) {
+      card.style.display = 'none';
+      return;
+    }
+
+    card.style.display = 'block';
+
+    const quoteEl = document.getElementById('xai-summary-text');
+    if (quoteEl) {
+      quoteEl.textContent = llmExp.summary_explanation || 'No summary explanation available.';
+    }
+
+    const stepsList = document.getElementById('xai-steps-list');
+    const toggleBtn = document.getElementById('xai-steps-toggle');
+
+    if (stepsList && llmExp.segment_reasons && llmExp.segment_reasons.length > 0) {
+      stepsList.innerHTML = llmExp.segment_reasons.map(s => `
+        <div class="xai-step-item">
+          <div class="xai-step-title">
+            <span>Step ${s.step}: Seg ${s.segment_id}</span>
+            <span style="color:#00d4ff">${s.zone} · ${(s.pickup_prob * 100).toFixed(1)}% · ¥${s.expected_earning.toFixed(1)}</span>
+          </div>
+          <div class="xai-step-reason">${s.reason}</div>
+        </div>
+      `).join('');
+
+      if (toggleBtn) {
+        toggleBtn.onclick = () => {
+          const isHidden = stepsList.style.display === 'none';
+          stepsList.style.display = isHidden ? 'flex' : 'none';
+          toggleBtn.querySelector('span').textContent = isHidden ? 'Hide Step-by-Step AI Rationale' : 'View Step-by-Step AI Rationale';
+        };
+      }
+    } else if (stepsList) {
+      stepsList.innerHTML = '';
+    }
+
+    if (window.lucide) lucide.createIcons();
   }
 
   // ─── Render Taxi List ──────────────────────────────────────────────────────
@@ -139,6 +243,45 @@ const Dashboard = (() => {
             </div>
           </div>`;
         if (window.lucide) lucide.createIcons();
+        return;
+      }
+
+      if (data.fallback) {
+        const summary = data.historical_summary;
+        container.innerHTML = `
+          <div class="panel-section" style="padding-top:12px">
+            <div class="paper-card" style="margin-bottom:14px">
+              <div class="paper-title">Historical Pickup Data</div>
+              <div class="paper-authors">${data.message}</div>
+              <div class="paper-meta"><span class="paper-tag">network_properties.csv</span></div>
+            </div>
+            <div class="section-title">Available Evaluation Data</div>
+            <div class="metrics-grid">
+              <div class="metric-card">
+                <div class="metric-label">Observed Segments</div>
+                <div class="metric-value teal">${summary.segments_with_observations.toLocaleString()}</div>
+                <div class="metric-sub">with pickup records</div>
+              </div>
+              <div class="metric-card">
+                <div class="metric-label">Mean Pickup Rate</div>
+                <div class="metric-value amber">${(summary.mean_pickup_rate * 100).toFixed(1)}%</div>
+                <div class="metric-sub">segment average</div>
+              </div>
+              <div class="metric-card">
+                <div class="metric-label">Overall Pickup Rate</div>
+                <div class="metric-value green">${(summary.overall_pickup_rate * 100).toFixed(1)}%</div>
+                <div class="metric-sub">weighted by observations</div>
+              </div>
+              <div class="metric-card">
+                <div class="metric-label">Pickup Events</div>
+                <div class="metric-value purple">${summary.total_pickups.toLocaleString()}</div>
+                <div class="metric-sub">historical records</div>
+              </div>
+            </div>
+            <div style="margin-top:14px;font-size:12px;color:var(--text-secondary);line-height:1.7">
+              GCN-LSTM MAE and hyperparameter charts require the optional experiment CSV. The route-level <b>Check Accuracy</b> button evaluates recommendations against these historical pickup rates.
+            </div>
+          </div>`;
         return;
       }
 
@@ -284,6 +427,8 @@ const Dashboard = (() => {
   return {
     updateMetrics,
     renderTaxiList,
+    renderMoraObjectives,
+    renderLLMExplanation,
     loadModelStats,
     loadNetworkSummary,
     animateCount,
