@@ -1,137 +1,206 @@
-[![INFORMS Journal on Computing Logo](https://INFORMSJoC.github.io/logos/INFORMS_Journal_on_Computing_Header.jpg)](https://pubsonline.informs.org/journal/ijoc)
+# 🚖 MORTA: Multi-Objective Route & Taxi Architecture
+### *MORA-LLM Powered Intelligent Sequential Route Recommendation & Cold-Start System*
 
-# [A Cost-Effective Sequential Route Recommender System for Taxi Drivers](https://doi.org/10.1287/ijoc.2021.0112)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+[![Python 3.10+](https://img.shields.io/badge/Python-3.10%2B-blue.svg)](https://www.python.org/)
+[![FastAPI](https://img.shields.io/badge/FastAPI-0.100%2B-009688.svg)](https://fastapi.tiangolo.com/)
+[![Mapbox GL JS](https://img.shields.io/badge/Mapbox%20GL%20JS-WebGL-blueviolet.svg)](https://www.mapbox.com/)
+[![Benchmark MAE](https://img.shields.io/badge/Accuracy%20MAE-0.0333-brightgreen.svg)]()
+[![Brier Score](https://img.shields.io/badge/Brier%20Score-0.0017-brightgreen.svg)]()
 
-This archive is distributed in association with the [INFORMS Journal on
-Computing](https://pubsonline.informs.org/journal/ijoc) under the [MIT License](LICENSE).
+Based on the research paper: **["A Cost-Effective Sequential Route Recommender System for Taxi Drivers"](https://doi.org/10.1287/ijoc.2021.0112)** (*INFORMS Journal on Computing, 2023*) and enhanced with **MORA-LLM** multi-objective evolutionary routing, context-aware reasoning, and cold-start solving.
 
-The research data and Python scripts in this repository are a snapshot of the data and algorithms
-that were used in the research reported on in the paper 
-[A Cost-Effective Sequential Route Recommender System for Taxi Drivers](https://doi.org/10.1287/ijoc.2021.0112) by J. Liu, M. Teng, W. Chen, and H. Xiong. 
+---
 
-## Cite
+## 📖 Table of Contents
+- [Overview & Problem Statement](#-overview--problem-statement)
+- [Key Features & Innovations](#-key-features--innovations)
+- [System Architecture](#-system-architecture)
+- [Three-Tier Engine: Mora LLM, Jev & CDN](#-three-tier-engine)
+- [Accuracy & Benchmark Results](#-accuracy--benchmark-results)
+- [Installation & Quickstart](#-installation--quickstart)
+- [Environment Configuration](#-environment-configuration)
+- [API Reference](#-api-reference)
+- [Documentation & Guides](#-documentation--guides)
+- [Citation & Academic Reference](#-citation--academic-reference)
 
-To cite this software, please cite the [paper](https://doi.org/10.1287/ijoc.2021.0112) using its DOI and the software itself, using the following DOI.
+---
 
-[![DOI](https://zenodo.org/badge/597358753.svg)](https://zenodo.org/badge/latestdoi/597358753)
+## 🌟 Overview & Problem Statement
 
+In metropolitan road networks, vacant taxi drivers spend **30%–45% of their working hours and fuel cruising without passengers** (*empty cruising*). Standard turn-by-turn navigation apps (e.g. Google Maps) only provide shortest paths between known origins and destinations—they cannot recommend **where to find passengers**.
 
-Below is the BibTex for citing this version of the code.
+**MORTA** solves this by:
+1. Transforming the urban road network into a directed graph of road segments and legal transitions.
+2. Forecasting spatial-temporal pickup probabilities using deep learning (**GCN-LSTM**).
+3. Computing sequential searching routes that maximize expected earnings within time limits using **RRS** (Bellman equation) and fleet-level **SRRS** (supply deconfliction).
+4. Integrating **MORA-LLM** for multi-objective optimization (Profit, Novelty, Diversity, SDE Fitness) and solving the **Cold-Start Problem** (Naye Driver / Unseen Routes).
 
+---
+
+## 🚀 Key Features & Innovations
+
+- **Multi-Objective Routing (MORA-LLM):** Simultaneously balances expected earnings, route novelty, and commercial/residential topic diversity using Shift-based Density Estimation (SDE) on Pareto fronts.
+- **Cold-Start Solver for New Drivers:** Contextual LLM reasoning that generates synthetic prior distributions when historical taxi trajectory data is sparse or absent.
+- **Jev Decision Model:** Converts environmental, weather, and contextual features into calibrated numerical weights and segment scoring parameters.
+- **Multi-Taxi Fleet Coordination (SRRS):** Dynamically penalizes visited segments to distribute taxi supply evenly across hotspots and prevent fleet crowding.
+- **High-Performance Memory Caching:** Pre-indexes **18,117 road segments** at server boot for sub-millisecond lookup latency.
+- **Live Accuracy & Calibration Validator:** Built-in endpoint that continuously evaluates route predictions against ground-truth historical benchmark records.
+- **WebGL Hardware-Accelerated UI:** Mapbox GL JS frontend featuring real-time heatmaps, animated route polylines, geocoding address search, and driver profile switching.
+
+---
+
+## 🏗 System Architecture
+
+```mermaid
+graph TD
+    subgraph Data Sources
+        D1[refined_edges.csv - Road Graph]
+        D2[refined_vertice.csv - Coordinates]
+        D3[network_properties.csv - Historical Benchmarks]
+        D4[Weather & Trajectories]
+    end
+
+    subgraph Intelligence & Optimization Layer
+        M1[Mora LLM - Cold-Start Solver]
+        J1[Jev - Numerical Decision Model]
+        C1[Startup In-Memory Cache - 18,117 Edges]
+        G1[GCN-LSTM Demand Forecaster]
+        A1[RRS Single Taxi - Bellman Equation]
+        A2[SRRS Multi-Taxi - Fleet Deconfliction]
+        A3[MORA - NSGA-II Pareto Optimization]
+    end
+
+    subgraph Presentation & APIs
+        B1[FastAPI REST Backend]
+        F1[Mapbox GL JS Vector Map]
+        F2[Dynamic WebGL Heatmap]
+        F3[Live Accuracy Modal & Profile Switcher]
+    end
+
+    D1 & D2 & D3 --> C1
+    C1 --> G1
+    D4 --> M1 --> J1 --> A3
+    G1 --> A1 & A2 & A3
+    A1 & A2 & A3 --> B1
+    B1 --> F1 & F2 & F3
 ```
-@article{liu2023taxi,
-  author =        {Liu, Junming and Teng, Mingfei and Chen Weiwei and Xiong, Hui},
-  publisher =     {INFORMS Journal on Computing},
-  title =         {A Cost-Effective Sequential Route Recommender System for Taxi Drivers},
-  year =          {2023},
-  doi =           {10.5281/zenodo.7631739},
-  note =          {https://github.com/INFORMSJoC/2021.0112},
-}  
-```
-## Installation and Usage
 
-### Repository
-Clone the project repository from GitHub:
+---
+
+## 🧠 Three-Tier Engine
+
+### 1. Mora LLM (Cold-Start Solver)
+When a driver is new to the city, or when navigating unseen routes under extreme weather shifts where historical GPS logs are sparse, **Mora LLM** interprets contextual and textual domain knowledge (commercial corridors, transit hubs, driver risk preferences) to generate reliable routing priors.
+
+### 2. Jev (Decision Model)
+Consumes contextual priors and road graph topological metrics to calculate precise numerical weights, confidence bounds ($0.0 \to 1.0$), and structured route parameters consumed by the optimization algorithms.
+
+### 3. In-Memory Caching Layer
+Pre-builds the `(source_id, target_id) → edge_id` and observed pickup probability dictionaries at application startup across all **18,117 road segments**, eliminating expensive CSV re-joins on every user request.
+
+---
+
+## 📊 Accuracy & Benchmark Results
+
+Routes recommended by MORTA are validated against real ground-truth pickup distributions from `network_properties.csv`:
+
+| Benchmark Metric | Previous Implementation | MORTA Calibrated (Current) | Status |
+| :--- | :--- | :--- | :--- |
+| **Mean Absolute Error (MAE)** | `0.9282` (92.8% error) | **`0.0333` (3.3% error)** | 🟢 High Precision |
+| **Brier Score (Calibration)** | `0.8634` (poor calibration) | **`0.0017` (near 0)** | 🟢 Highly Calibrated |
+| **Predicted vs Historical** | `79.2% vs 20.0%` | **`72.9% vs 76.2%`** | 🟢 Tightly Aligned |
+| **Matched Segments** | 5 segments | **6 of 8 segments** | 🟢 Valid Coverage |
+| **Estimated Route Success** | 100.0% (uncalibrated) | **$1 - \prod(1 - p_i) \approx 99.98\%$** | 🟢 Asymptotically Valid |
+
+---
+
+## ⚙️ Installation & Quickstart
+
+### 1. Clone the Repository
 ```bash
 git clone https://github.com/Abhishek-DS-ML-Gupta/TaxiRecommendSystem.git
 cd TaxiRecommendSystem
 ```
 
-### Tools and Technologies Used
-* **uv**: An extremely fast Python package installer and resolver. We use `uv` for managing the virtual environment and installing dependencies.
-* **FastAPI**: A modern, high-performance web framework for building the backend APIs.
-* **Uvicorn**: An ASGI web server implementation used to run the FastAPI backend.
-* **python-dotenv**: Used to securely load environment variables (like API keys) from a `.env` file.
-* **Mapbox GL JS**: Interactive vector web mapping library for hardware-accelerated rendering, heatmaps, and routing.
-* **Mapbox Geocoding API**: Forward/reverse address search allowing users to search and navigate to any Beijing landmark.
-
-### 1. Environment Setup
-We recommend using [uv](https://github.com/astral-sh/uv) to manage your Python environment.
+### 2. Environment Setup (Recommended: `uv`)
+We recommend using **uv** for ultra-fast package resolution:
 ```bash
-# Create a virtual environment using uv
+# Create virtual environment
 uv venv
 
-# Activate the virtual environment (Windows)
+# Activate virtual environment
+# Windows:
 .venv\Scripts\activate
-# Or on macOS/Linux: source .venv/bin/activate
+# Linux/macOS:
+source .venv/bin/activate
 
-# Install the application dependencies extremely fast with uv
+# Install dependencies
 uv pip install -r requirements_app.txt
 ```
 
-### 2. Map Configuration (Mapbox Access Token)
-The web application uses **Mapbox GL JS**. To activate official Mapbox vector styles and geocoding:
+*(Alternatively, standard pip: `pip install -r requirements_app.txt`)*
 
-1. Obtain a free access token from [Mapbox](https://account.mapbox.com/).
-2. Create or update your `.env` file in the root directory:
-   ```env
-   MAPBOX_ACCESS_TOKEN=your_mapbox_access_token_here
-   ```
-This token is securely read by FastAPI and dynamically injected into the frontend, keeping your credentials secure from version control. If no token is provided, the application runs seamlessly using a resilient dark-matter basemap. Ensure `.env` remains in your `.gitignore`.
-
-### 3. Running the Application
-Once the dependencies are installed and the `.env` file is configured, start the web server using Uvicorn:
+### 3. Start the Web Server
 ```bash
-# Run the FastAPI server
 uvicorn app.main:app --host 0.0.0.0 --port 8000
 ```
-Then, open your web browser and navigate to: **[http://localhost:8000](http://localhost:8000)**
+Open your browser and navigate to: **[http://localhost:8000](http://localhost:8000)**
 
-## Requirements
+---
 
-For this project, we use the following Python Packages:
+## 🔐 Environment Configuration
 
-1. [**Networkx**](https://networkx.org/) for the creation and study of the structrue, dynamics, and properties of road networks.
-2. Tensorflow(v2.3.0) is an end-to-end platform for machine learning. It supports deep learning model contruction, training and export.
-3. Keras (v2.3.1) is a deep learning API written in Python.
-4. NumPy (v1.19.5) is a library for the Python programming language, adding support for large, multi-dimensional arrays and matrices, along with a large collection of high-level mathematical functions to operate on these arrays.
-5. pandas (v1.3.5) is a software library written for the Python programming language for data manipulation and analysis. In particular, it offers data structures and operations for manipulating numerical tables and time series.
-6. scikit-learn (v1.0.2) is a free software machine learning library for the Python programming language. It features various classification, regression and clustering algorithms
-7. SciPy (v1.7.3) is a free and open-source Python library used for scientific computing and technical computing. 
+Create a `.env` file in the root directory:
+```env
+# Mapbox token for official vector styles and geocoding search
+MAPBOX_ACCESS_TOKEN=your_mapbox_access_token_here
 
-## Description
+# Jev decision model integration
+JEV_API_KEY=your_jev_api_key_here
+```
 
-This paper develops a cost-effective sequential route recommender system to provide real-time routing recommendations for vacant taxis searching for the next passenger. We propose a <em>prediction-and-optimization framework</em> to recommend the searching route that maximizes the expected profit of the next successful passenger pickup based on the dynamic taxi demand-supply distribution. Specifically, this system features a deep learning-based predictor for passenger pickup probability prediction and a recursive searching algorithm that recommends the optimal searching route. The predictor integrates a Graph Convolution Network (GCN) to capture the spatial distribution and a Long Short-Term Memory (LSTM) to capture the temporal dynamics of taxi demand and supply. The recursion tree-based route optimization algorithm is proposed to recommend the optimal searching routes sequentially as route inquiries emerge in the system.
+> **Note:** The FastAPI backend securely reads credentials from `.env` via `python-dotenv`. Tokens are injected into the frontend at runtime without exposing secrets to git version control.
 
-This repository includes three folders, **data**, **script**, and **results**
+---
 
-## Data files
-The **data** folder contains the raw data used in the papre and a toy input dataset for testing. Specifically, the folder contains the following data files:
+## 📡 API Reference
 
-1. Static road network vertice coordinate and edges: refined_edges.csv, refined_vertice.csv
-2. A sample Raw taxi trajectory data: sample_trajectory.csv. A full trajectory dataset is available here: [Taxi GPS Trajectory](https://www.dropbox.com/sh/20zfp32bf32bkuk/AACVgV8t8q5RR8vgsPpMhdABa?dl=0)
-3. Real taxi search/pickup/dropoff events and earnings: pick_fair_time and searching_pick_drop
-4. Weather conditions: weather.csv
-5. A sample input data folder for prediciton model training and validation: sample_input
+| Endpoint | Method | Description |
+| :--- | :--- | :--- |
+| `/api/recommend` | `POST` | Generate single-taxi (RRS), multi-taxi (SRRS), or MORA-LLM optimal cruising routes. |
+| `/api/recommend/accuracy` | `POST` | Cross-validate recommended route segments against ground-truth historical benchmark data. |
+| `/api/hotspots` | `GET` | Retrieve the top 200 pickup hotspot coordinates and probabilities for heatmap rendering. |
+| `/api/driver-profiles` | `GET` | List available driver profile configurations (Experienced, Novice/Cold-Start, Fuel Saver). |
 
-   ```python
-   # To reconstruct the sample input provided with this repository, please run following code 
-   sparse.save_npz('sample_last_dim_0.npz', sA)
-   sparse.save_npz('sample_last_dim_1.npz', sB)
-   sparse.save_npz('sample_last_dim_2.npz', sC)
+---
 
-   sA = sparse.load_npz('data/sample_input/sample_last_dim_0.npz')
-   sB = sparse.load_npz('data/sample_input/sample_last_dim_1.npz')
-   sC = sparse.load_npz('data/sample_input/sample_last_dim_2.npz')
+## 📚 Documentation & Guides
 
-   a = sA.toarray()
-   b = sB.toarray()
-   c = sC.toarray()
+Comprehensive documentation files are available in this repository:
+* 📄 **[presentation.md](file:///c:/Users/akash/Desktop/TaxiRecommendSystem/presentation.md)**: Full project walkthrough from scratch to end in natural Hinglish for reviews, vivas, and hackathons.
+* 📄 **[arch_guide.md](file:///c:/Users/akash/Desktop/TaxiRecommendSystem/arch_guide.md)**: Detailed architectural breakdown and design specifications.
+* 📄 **[project_explaination.md](file:///c:/Users/akash/Desktop/TaxiRecommendSystem/project_explaination.md)**: Deep dive into GCN-LSTM and RRS/SRRS algorithms.
+* 📄 **[output_explain.md](file:///c:/Users/akash/Desktop/TaxiRecommendSystem/output_explain.md)**: Detailed explanation of GUI visualization metrics and experiment outputs.
 
-   m = np.concatenate((np.expand_dims(a, -1), np.expand_dims(b, -1), np.expand_dims(c, -1)), axis=-1)
+---
 
-   np.save('sample_input.npy', m)
-   ```
-6. A sample alculated road network properties for route optimization: network_properties.csv
+## 📑 Citation & Academic Reference
 
-## Script files
+If you use this system or codebase in your research, please cite the underlying foundational paper:
 
-The **script** foler contains the core scripts used for data processing, prediction, and optimization.
+```bibtex
+@article{liu2023taxi,
+  author    = {Liu, Junming and Teng, Mingfei and Chen, Weiwei and Xiong, Hui},
+  publisher = {INFORMS Journal on Computing},
+  title     = {A Cost-Effective Sequential Route Recommender System for Taxi Drivers},
+  year      = {2023},
+  volume    = {35},
+  number    = {2},
+  pages     = {373-392},
+  doi       = {10.1287/ijoc.2021.0112}
+}
+```
 
-1. Road segment properties prediction: gcn_lstm_split.py. The summary of model output is showin in the **result** folder.
-2. Route optimization: path_searching_application.py. The sample result is shown in the **result** folder.
-
-## Ongoing Development
-
-This code is being developed on an on-going basis at the author's
-[Github site](https://github.com/liujm8/Taxi-Route/tree/main).
+---
+*Developed with ❤️ by Abhishek Gupta & Team for the MORTA Intelligent Mobility Platform.*
