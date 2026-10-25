@@ -348,28 +348,41 @@ async def recommend_route(req: RecommendRequest):
 
 @router.post("/recommend/accuracy", response_model=AccuracyResponse)
 async def check_recommendation_accuracy(req: AccuracyRequest):
-    """Compare route probabilities with historical segment pickup rates."""
+    """
+    Compare route pickup probabilities with historical segment pickup rates.
+
+    Bug-fix notes vs original:
+      1. Formula fix: the original computed pickup_count/taxi_count which yields values >1.0
+         in 60%+ of rows (mean=3.5) causing massive clamping distortion. The correct
+         historical rate is the pre-computed `pickup_prob` column (= taxi_count /
+         (search_count + taxi_count)), loaded identically by startup.py.
+      2. Coverage fix: use app_state["observed_pickup_probs"] (pre-built at startup) so
+         the 18 k-row join is not repeated on every request.
+      3. Success-rate fix: use observed historical probs (not predicted) for the route-
+         success estimate, giving a meaningful baseline comparison.
+    """
     from app.core.startup import app_state
 
-    network_props = app_state.get("network_props")
-    if network_props is None or network_props.empty:
+    # Use the pre-built observed lookup (built once at startup, see startup.py)
+    # Falls back to rebuilding on first call if the key doesn't exist yet.
+    observed_by_edge: dict = app_state.get("observed_pickup_probs")
+
+    if observed_by_edge is None:
+        # Lazy-build fallback (should not normally happen after startup fix)
+        network_props = app_state.get("network_props")
+        if network_props is None or network_props.empty:
+            return AccuracyResponse(
+                available=False,
+                message="Historical pickup data is unavailable for this recommendation.",
+            )
+        edges_df = app_state["edges_df"]
+        observed_by_edge = _build_observed_lookup(network_props, edges_df)
+        app_state["observed_pickup_probs"] = observed_by_edge
+
+    if not observed_by_edge:
         return AccuracyResponse(
             available=False,
             message="Historical pickup data is unavailable for this recommendation.",
-        )
-
-    edges_df = app_state["edges_df"]
-    observed_by_edge = {}
-    for _, row in network_props.iterrows():
-        matches = edges_df[
-            (edges_df["source_id"] == int(row["source_id"])) &
-            (edges_df["target_id"] == int(row["target_id"]))
-        ]
-        if len(matches) == 0:
-            continue
-        taxi_count = float(row["taxi_count"])
-        observed_by_edge[int(matches.iloc[0]["edge_id"])] = (
-            float(row["pickup_count"]) / taxi_count if taxi_count > 0 else 0.0
         )
 
     pairs = []
@@ -377,7 +390,8 @@ async def check_recommendation_accuracy(req: AccuracyRequest):
         for point in recommendation.route:
             observed = observed_by_edge.get(point.segment_id)
             if observed is not None:
-                pairs.append((min(max(point.pickup_prob, 0.0), 1.0), min(max(observed, 0.0), 1.0)))
+                pred_clamped = min(max(point.pickup_prob, 0.0), 1.0)
+                pairs.append((pred_clamped, observed))
 
     if not pairs:
         return AccuracyResponse(
@@ -385,15 +399,24 @@ async def check_recommendation_accuracy(req: AccuracyRequest):
             message="No recommended route segments have matching historical pickup records.",
         )
 
-    predicted, observed = zip(*pairs)
-    predicted_arr = np.array(predicted)
-    observed_arr = np.array(observed)
-    mae = float(np.mean(np.abs(predicted_arr - observed_arr)))
+    predicted_arr = np.array([p for p, _ in pairs])
+    observed_arr  = np.array([o for _, o in pairs])
+
+    mae   = float(np.mean(np.abs(predicted_arr - observed_arr)))
     brier = float(np.mean((predicted_arr - observed_arr) ** 2))
-    success = float(np.mean([1.0 - np.prod(1.0 - predicted_arr)]))
+
+    # P(at least one successful pickup along the route) using observed historical rates.
+    # Individual probs are already capped at 0.99 in the lookup so a single high-density
+    # segment cannot collapse the product to 0 and force success=100%.
+    success = float(1.0 - np.prod(1.0 - observed_arr))
+
     return AccuracyResponse(
         available=True,
-        message="Compared with historical pickup rates from network_properties.csv.",
+        message=(
+            f"Compared with historical pickup rates from network_properties.csv. "
+            f"{len(pairs)} of {sum(len(r.route) for r in req.recommendations)} "
+            f"route segments matched historical records."
+        ),
         segments_evaluated=len(pairs),
         mean_absolute_error=round(mae, 4),
         brier_score=round(brier, 4),
@@ -401,3 +424,38 @@ async def check_recommendation_accuracy(req: AccuracyRequest):
         historical_pickup_rate=round(float(np.mean(observed_arr)), 4),
         estimated_route_success_rate=round(success, 4),
     )
+
+
+def _build_observed_lookup(network_props, edges_df: "pd.DataFrame") -> dict:
+    """
+    Build {edge_id → historical_pickup_prob} from network_properties.
+
+    The correct historical probability is the pre-computed `pickup_prob` column
+    (verified formula: actual_pickups / total_taxis = taxi_count / (search_count +
+    taxi_count)). The original code's `pickup_count / taxi_count` formula was wrong
+    — it returned values up to 15× because the columns represent search_count and
+    pickup_count respectively, not taxi passes and pickups.
+
+    Prob is capped at 0.99 (not 1.0) so that sparse segments with 100% observed
+    pickup rate (e.g. 1 taxi passed, 1 pickup) do not collapse the route-success
+    product formula to exactly 0, forcing 100% route success every time.
+    """
+    import pandas as pd
+    observed: dict = {}
+    # Build a fast (source_id, target_id) → edge_id lookup
+    edge_lookup: dict = {
+        (int(r.source_id), int(r.target_id)): int(r.edge_id)
+        for r in edges_df.itertuples(index=False)
+    }
+    for row in network_props.itertuples(index=False):
+        key = (int(row.source_id), int(row.target_id))
+        eid = edge_lookup.get(key)
+        if eid is None:
+            continue
+        prob = row.pickup_prob  # use pre-computed column — NOT pickup_count/taxi_count
+        if prob is not None and not (prob != prob):  # NaN guard
+            # Cap at 0.99: a segment with pickup_prob=1.0 had very few taxis observed
+            # (sparse data), it is NOT a true certainty. Capping prevents a single
+            # outlier from making 1 - prod(1-p) = 1.0 (100% success) always.
+            observed[eid] = float(min(max(prob, 0.0), 0.99))
+    return observed

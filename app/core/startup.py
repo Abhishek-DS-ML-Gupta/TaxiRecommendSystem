@@ -32,13 +32,14 @@ app_state = {
     "route_G": None,         # routing graph (segment→segment)
     "optimizer": None,       # RouteOptimizer instance (RRS/SRRS)
     "mora_optimizer": None,  # MORARouteOptimizer instance (MORA-LLM Multi-Objective)
-    "pickup_probs": None,    # {edge_id → float}
+    "pickup_probs": None,    # {edge_id → float}  (clamped, used by optimizer)
     "earnings": None,        # {edge_id → float}
     "taxi_counts": None,     # {edge_id → int}
     "travel_times": None,    # {(u,v) → float}
     "node_coords": None,     # {node_id → (lat, lon)}
     "edge_coords": None,     # {edge_id → (lat, lon)} midpoint of each segment
     "network_props": None,   # raw network_properties DataFrame
+    "observed_pickup_probs": None,  # {edge_id → float} raw historical probs for accuracy
     "valid_start_nodes": [],
     "top_hotspots": [],      # top-100 pickup probability hotspots
     "driver_profiles": [],   # available driver personas
@@ -200,6 +201,29 @@ def load_all(data_dir: str = None, time_limit_tau: float = 10.0):
 
     driver_profiles = list_all_driver_profiles()
 
+    # ── Pre-build observed pickup probability lookup for accuracy checks ──────
+    # Uses the pre-computed `pickup_prob` column from network_properties.csv directly.
+    # The original accuracy code had a bug: it recomputed pickup_count/taxi_count at
+    # request time which (a) was wrong—values exceeded 1.0 in 60% of rows—and
+    # (b) iterated 18 k rows on every Check Accuracy click.
+    observed_pickup_probs: dict = {}
+    if network_props is not None:
+        edge_lookup = {
+            (int(r.source_id), int(r.target_id)): int(r.edge_id)
+            for r in edges_df.itertuples(index=False)
+        }
+        for row in network_props.itertuples(index=False):
+            key = (int(row.source_id), int(row.target_id))
+            eid = edge_lookup.get(key)
+            if eid is None:
+                continue
+            prob = row.pickup_prob
+            if prob is not None and not (prob != prob):  # NaN guard
+                # Cap at 0.99 — segments with prob=1.0 are sparse outliers (1 taxi, 1 pickup)
+                # and would collapse the route-success product to 0 → 100% always.
+                observed_pickup_probs[eid] = float(min(max(prob, 0.0), 0.99))
+        print(f"[startup] Accuracy lookup built: {len(observed_pickup_probs)} edges with historical data.", flush=True)
+
     # Populate global state
     app_state.update({
         "G": G,
@@ -215,6 +239,7 @@ def load_all(data_dir: str = None, time_limit_tau: float = 10.0):
         "node_coords": node_coords,
         "edge_coords": edge_coords,
         "network_props": network_props,
+        "observed_pickup_probs": observed_pickup_probs,
         "valid_start_nodes": valid_start_nodes,
         "top_hotspots": top_hotspots,
         "driver_profiles": driver_profiles,
