@@ -54,11 +54,11 @@ async def get_network(
 
 @router.get("/hotspots")
 async def get_hotspots(
-    top_n: int = Query(150, description="Number of top hotspots to return")
+    top_n: int = Query(200, description="Number of top hotspots to return")
 ) -> Dict[str, Any]:
     """
     Returns the top-N road segments by pickup probability as heatmap data.
-    Each point: [lat, lon, intensity (0–1)]
+    Each point: [lat, lon, intensity (0–1), pickup_prob, expected_earning]
     """
     from app.core.startup import app_state
 
@@ -70,12 +70,15 @@ async def get_hotspots(
     points = []
     for eid, prob, (lat, lon) in top_hotspots:
         if lat != 0 and lon != 0:
+            earning = round(app_state["earnings"].get(eid, 0.0), 2)
             points.append({
                 "lat": lat,
                 "lon": lon,
                 "intensity": round(prob, 4),
+                "pickup_prob": round(prob, 4),
                 "segment_id": eid,
-                "earning": round(app_state["earnings"].get(eid, 0.0), 2)
+                "earning": earning,
+                "expected_earning": earning
             })
 
     return {

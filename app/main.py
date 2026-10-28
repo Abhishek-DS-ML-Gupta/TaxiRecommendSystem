@@ -80,8 +80,10 @@ app.include_router(stats.router, prefix="/api", tags=["Model Statistics"])
 @app.get("/api/config", tags=["Configuration"])
 async def get_config():
     """Returns frontend configuration such as API keys from the .env file."""
+    token = os.environ.get("MAPBOX_ACCESS_TOKEN", "")
     return {
-        "mapbox_access_token": os.environ.get("MAPBOX_ACCESS_TOKEN", "")
+        "mapbox_token": token,
+        "mapbox_access_token": token
     }
 
 # ─── Static Files (Frontend SPA) ──────────────────────────────────────────────
