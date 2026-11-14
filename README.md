@@ -67,26 +67,26 @@ The system is configured exclusively on real-world Indian urban transit data:
 ## 🏗 System Architecture
 
 ```mermaid
-graph TD
-    subgraph Data Layer - Bangalore, India
+flowchart TD
+    subgraph DataLayer["Data Layer - Bangalore India"]
         D1["refined_edges.csv (4,142 Segments)"]
         D2["refined_vertice.csv (497 Intersections)"]
-        D3["network_properties.csv (Probabilities & ₹ Fares)"]
+        D3["network_properties.csv (Probabilities and INR Fares)"]
     end
 
-    subgraph Intelligence & Optimization Layer
+    subgraph IntelLayer["Intelligence and Optimization Layer"]
         C1["In-Memory Cache (4,142 Nodes, 35,162 Transitions)"]
-        M1["MORA-LLM Contextual Reasoner & Cold-Start"]
+        M1["MORA-LLM Contextual Reasoner and Cold-Start"]
         A1["RRS Single Taxi (Bellman Optimality)"]
         A2["SRRS Multi-Taxi Fleet Deconfliction (Beam Pruned)"]
         A3["NSGA-II Pareto Optimization (Profit vs. Novelty)"]
     end
 
-    subgraph Presentation & APIs
+    subgraph PresentationLayer["Presentation and APIs"]
         B1["FastAPI REST Backend (Uvicorn 0.0.0.0:8000)"]
         F1["Mapbox GL JS Bangalore Vector Map"]
         F2["Dynamic WebGL Pickup Heatmap"]
-        F3["Interactive Pareto Objective Space (₹ Fares)"]
+        F3["Interactive Pareto Objective Space (INR Fares)"]
         F4["Corridor Waypoint Navigator with Click-to-Fly"]
     end
 
