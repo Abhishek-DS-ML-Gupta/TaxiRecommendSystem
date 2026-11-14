@@ -18,6 +18,7 @@ Based on the foundational paper: **["A Cost-Effective Sequential Route Recommend
 - [Key Features & Innovations](#-key-features--innovations)
 - [Dataset: Bangalore, Karnataka, India](#-dataset-bangalore-karnataka-india)
 - [System Architecture](#-system-architecture)
+- [Three-Tier Engine: MORA-LLM, JEV & In-Memory Cache](#-three-tier-engine-mora-llm-jev--in-memory-cache)
 - [Pickup Probability vs. Route Success Rate](#-pickup-probability-vs-route-success-rate)
 - [Trade-Off Analysis & Waypoint Guidance](#-trade-off-analysis--waypoint-guidance)
 - [Accuracy & Benchmark Results](#-accuracy--benchmark-results)
@@ -77,6 +78,7 @@ flowchart TD
     subgraph IntelLayer["Intelligence and Optimization Layer"]
         C1["In-Memory Cache (4,142 Nodes, 35,162 Transitions)"]
         M1["MORA-LLM Contextual Reasoner and Cold-Start"]
+        J1["JEV Decision Model (Numerical Scoring and Weights)"]
         A1["RRS Single Taxi (Bellman Optimality)"]
         A2["SRRS Multi-Taxi Fleet Deconfliction (Beam Pruned)"]
         A3["NSGA-II Pareto Optimization (Profit vs. Novelty)"]
@@ -92,10 +94,35 @@ flowchart TD
 
     D1 & D2 & D3 --> C1
     C1 --> A1 & A2 & A3
-    M1 --> A3
+    M1 --> J1 --> A3
     A1 & A2 & A3 --> B1
     B1 --> F1 & F2 & F3 & F4
 ```
+
+---
+
+## 🧠 Three-Tier Engine: MORA-LLM, JEV & In-Memory Cache
+
+MORTA coordinates a three-tier decision pipeline to produce real-time cruising recommendations:
+
+### 1. MORA-LLM (Cold-Start Solver & Contextual Reasoning)
+* **Problem Addressed:** New drivers with zero trip history, unfamiliar road corridors, or anomalous shifts (e.g., peak rain, late-night transit).
+* **Mechanism:** Interprets driver persona profiles (Alex Zhang / Novice, Veteran, Night Shift, Eco-Cruiser) and translates semantic constraints into routing priors using LLM-Enhanced Persona Synthesis (LEPS).
+
+### 2. JEV (Numerical Decision & Scoring Model)
+* **What it does:** Converts qualitative LLM priors and road graph topological metrics into calibrated numerical weights and segment evaluation scores.
+* **Scoring Formula (Bellman Equation Variant):**
+  $$\text{Score}(s) = p_s \times R_s + \alpha \times \Delta_{\text{context}} - \text{Penalty}(c_s)$$
+  Where:
+  - $p_s$: Segment pickup probability from `network_properties.csv`.
+  - $R_s$: Expected trip fare in Indian Rupees ($\text{₹}$).
+  - $\alpha$: Dynamic correction factor (incorporating weather, peak hours, and driver risk tolerance).
+  - $c_s$: Cruising competition count (penalizes segments with excessive empty taxis).
+* **Output:** Provides the Pareto objective function evaluations ($f_1 = \text{Profit}$, $f_2 = \text{Novelty}$, $f_3 = \text{Diversity}$) for the NSGA-II evolutionary optimizer.
+
+### 3. In-Memory Graph Caching Layer
+* Pre-indexes **4,142 road segments** and **35,162 transitions** at server boot into memory.
+* Eliminates CSV re-parsing on every request, delivering sub-second recommendation latency ($< 0.4\text{s}$).
 
 ---
 
