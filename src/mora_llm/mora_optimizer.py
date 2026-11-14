@@ -516,6 +516,13 @@ class MORARouteOptimizer:
                     "diversity": round(float(obj_matrix[best_profit_idx, 2]), 4),
                     "label": "Max Profit / Revenue"
                 },
+                "max_novelty": {
+                    "route": max_novelty_route,
+                    "profit": round(float(obj_matrix[best_novelty_idx, 0]), 2),
+                    "novelty": round(float(obj_matrix[best_novelty_idx, 1]), 4),
+                    "diversity": round(float(obj_matrix[best_novelty_idx, 2]), 4),
+                    "label": "Max Novelty (Underserved Demand)"
+                },
                 "max_exploration": {
                     "route": max_novelty_route,
                     "profit": round(float(obj_matrix[best_novelty_idx, 0]), 2),

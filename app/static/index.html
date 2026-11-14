@@ -2225,9 +2225,31 @@
       },
 
       applyParetoAlternative(altKey) {
-        if (!AppState.currentResult || !AppState.currentResult.pareto_alternatives) return;
-        const altData = AppState.currentResult.pareto_alternatives[altKey];
+        if (!AppState.currentResult) return;
+        const paretoObj = AppState.currentResult.pareto_alternatives || {};
+        // Match altKey or fallback between novelty and exploration
+        const resolvedKey = (altKey === 'max_novelty' && !paretoObj.max_novelty && paretoObj.max_exploration)
+          ? 'max_exploration'
+          : (altKey === 'max_exploration' && !paretoObj.max_exploration && paretoObj.max_novelty)
+          ? 'max_novelty'
+          : altKey;
+
+        const altData = paretoObj[resolvedKey] || paretoObj[altKey];
         if (!altData) return;
+
+        AppState.selectedParetoAlt = altKey;
+
+        // Synchronize Tab Buttons
+        const paretoTabs = document.querySelectorAll('.pareto-pill');
+        paretoTabs.forEach(t => {
+          if (t.dataset.pareto === altKey || (altKey === 'max_exploration' && t.dataset.pareto === 'max_novelty')) {
+            t.classList.add('active', 'bg-white', 'text-slate-800', 'shadow-2xs');
+            t.classList.remove('text-slate-600');
+          } else {
+            t.classList.remove('active', 'bg-white', 'text-slate-800', 'shadow-2xs');
+            t.classList.add('text-slate-600');
+          }
+        });
 
         // Update stats
         document.getElementById('stat-earning').textContent = (altData.profit || 105.0).toFixed(2);
@@ -2253,7 +2275,7 @@
           label: altData.label || 'Alternative',
           coords: coords,
           profit: altData.profit,
-          color: altKey === 'max_profit' ? '#10b981' : (altKey === 'max_novelty' ? '#f59e0b' : '#7c5dfa')
+          color: altKey === 'max_profit' ? '#10b981' : (altKey === 'max_novelty' || altKey === 'max_exploration' ? '#f59e0b' : '#7c5dfa')
         }];
         MapEngine.renderRoutes(altRoute, 0);
 
@@ -2263,7 +2285,7 @@
         }
 
         // Re-render scatter plot active point
-        this.renderParetoPlot(AppState.currentResult.pareto_alternatives);
+        this.renderParetoPlot(paretoObj);
       },
 
       async evaluateAccuracy(data = null) {
