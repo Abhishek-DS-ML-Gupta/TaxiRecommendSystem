@@ -23,6 +23,7 @@ Based on the foundational paper: **["A Cost-Effective Sequential Route Recommend
 - [Trade-Off Analysis & Waypoint Guidance](#-trade-off-analysis--waypoint-guidance)
 - [Accuracy & Benchmark Results](#-accuracy--benchmark-results)
 - [Installation & Quickstart](#-installation--quickstart)
+- [Environment Configuration](#-environment-configuration)
 - [API Reference](#-api-reference)
 - [Documentation & Guides](#-documentation--guides)
 - [Citation & Academic Reference](#-citation--academic-reference)
@@ -110,15 +111,16 @@ MORTA coordinates a three-tier decision pipeline to produce real-time cruising r
 * **Mechanism:** Interprets driver persona profiles (Alex Zhang / Novice, Veteran, Night Shift, Eco-Cruiser) and translates semantic constraints into routing priors using LLM-Enhanced Persona Synthesis (LEPS).
 
 ### 2. JEV (Numerical Decision & Scoring Model)
-* **What it does:** Converts qualitative LLM priors and road graph topological metrics into calibrated numerical weights and segment evaluation scores.
+* **What it does:** Converts qualitative LLM priors and road graph topological metrics into calibrated numerical weights and segment evaluation scores using `JEV_TOKEN` authentication.
 * **Scoring Formula (Bellman Equation Variant):**
   $$\text{Score}(s) = p_s \times R_s + \alpha \times \Delta_{\text{context}} - \text{Penalty}(c_s)$$
   Where:
   - $p_s$: Segment pickup probability from `network_properties.csv`.
   - $R_s$: Expected trip fare in Indian Rupees ($\text{₹}$).
   - $\alpha$: Dynamic correction factor (incorporating weather, peak hours, and driver risk tolerance).
-  - $c_s$: Cruising competition count (penalizes segments with excessive empty taxis).
-* **Output:** Provides the Pareto objective function evaluations ($f_1 = \text{Profit}$, $f_2 = \text{Novelty}$, $f_3 = \text{Diversity}$) for the NSGA-II evolutionary optimizer.
+  - $c_s$: Cruising competition count (sublinear penalty $\log(1 + c_s) \times 3.5$ to prevent fleet crowding).
+* **Token Authentication:** Securely reads `JEV_TOKEN` from `.env` to enable dynamic model weighting and confidence calibration ($0.88 - 0.98$).
+* **Output:** Supplies the Pareto objective evaluations ($f_1 = \text{Profit}$, $f_2 = \text{Novelty}$, $f_3 = \text{Diversity}$) for the NSGA-II evolutionary optimizer.
 
 ### 3. In-Memory Graph Caching Layer
 * Pre-indexes **4,142 road segments** and **35,162 transitions** at server boot into memory.
@@ -198,6 +200,21 @@ uv pip install -r requirements_app.txt
 uvicorn app.main:app --host 0.0.0.0 --port 8000
 ```
 Open your browser and navigate to: **[http://localhost:8000](http://localhost:8000)**
+
+---
+
+## 🔐 Environment Configuration
+
+Create a `.env` file in the root directory (or use the pre-configured file):
+```env
+# Mapbox token for vector styles and geocoding search
+MAPBOX_ACCESS_TOKEN=your_mapbox_access_token_here
+
+# JEV decision model token for high-accuracy scoring and confidence calibration
+JEV_TOKEN=your_jev_token_here
+```
+
+> **Note:** The system uses `python-dotenv` to securely inject credentials at runtime without exposing keys to version control. If `JEV_TOKEN` is not provided, the engine safely defaults to high-speed offline Bellman calculations.
 
 ---
 
