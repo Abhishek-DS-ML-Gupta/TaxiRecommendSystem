@@ -40,7 +40,7 @@ class LLMRecommendationReasoner:
           - Example 3: The current Accuracy/Profit optimal list S1
         """
         ex1_str = ", ".join([
-            f"[Seg {item.get('segment_id', '?')}: {item.get('zone', 'Zone')} (rating {item.get('rating', 4.0)}, earn ¥{item.get('earning', 20):.1f})]"
+            f"[Seg {item.get('segment_id', '?')}: {item.get('zone', 'Zone')} (rating {item.get('rating', 4.0)}, earn ₹{item.get('earning', 20):.1f})]"
             for item in historical_samples[:10]
         ]) or "[New driver onboarded, baseline urban preference profile]"
 
@@ -62,8 +62,7 @@ Driver's historical interactions:
 Candidate list (Exploration items Example2 + Optimal items Example3):
 {ex2_str}, {ex3_str}
 
-Instruction:
-Just output the top {k} recommended segment IDs for driver u and a clear, persuasive recommendation reason for each segment explaining why it maximizes earnings, matches driver preference, and avoids unnecessary empty cruising.
+Output the top {k} recommended segment IDs for driver u and a clear recommendation reason for each segment explaining why it maximizes earnings, matches driver preference, and avoids unnecessary empty cruising.
 """
         return prompt.strip()
 
@@ -125,7 +124,7 @@ Just output the top {k} recommended segment IDs for driver u and a clear, persua
             total_p += prob
             total_earn += earn
 
-            lat, lon = edge_coords.get(eid, (39.904, 116.407))
+            lat, lon = edge_coords.get(eid, (12.9716, 77.5946))
             zone = get_zone_for_segment(eid, lat, lon)
 
             # Generate contextual reason for this step
@@ -137,7 +136,7 @@ Just output the top {k} recommended segment IDs for driver u and a clear, persua
             elif zone in pref_zones:
                 step_reason = (
                     f"Directly satisfies {driver_name}'s preference for {zone} corridors with high passenger demand "
-                    f"(expected fare ¥{earn:.1f})."
+                    f"(expected fare ₹{earn:.1f})."
                 )
             elif prob > 0.4:
                 step_reason = (
@@ -178,7 +177,7 @@ Just output the top {k} recommended segment IDs for driver u and a clear, persua
 
         summary_explanation = (
             f"MORA-LLM recommended this {len(route)}-segment route for {driver_name} "
-            f"to achieve an expected route revenue of ¥{expected_total:.2f} (mean {avg_p*100:.1f}% pickup chance per segment). "
+            f"to achieve an expected route revenue of ₹{expected_total:.2f} (mean {avg_p*100:.1f}% pickup chance per segment). "
             f"{scenario_note} {cold_start_note}"
         )
 

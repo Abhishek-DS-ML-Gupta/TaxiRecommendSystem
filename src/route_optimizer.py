@@ -49,6 +49,13 @@ class RouteOptimizer:
         # Prioritize unvisited neighbors to prevent ping-pong 2-cycles
         unvisited = [n for n in neighbors if n not in visited]
         candidates = unvisited if unvisited else neighbors
+        # Beam pruning: evaluate top 4 most promising neighbors to ensure sub-second Bellman convergence
+        if len(candidates) > 4:
+            candidates = sorted(
+                candidates,
+                key=lambda n: pickup_probs.get(n, 0.0) * earnings.get(n, 25.0),
+                reverse=True
+            )[:4]
 
         for neighbor in candidates:
             t_r = travel_times.get((current_node, neighbor), 1.0) # default travel time 1.0

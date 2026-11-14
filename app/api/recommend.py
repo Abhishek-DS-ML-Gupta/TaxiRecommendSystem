@@ -15,8 +15,8 @@ router = APIRouter()
 # ─── Request / Response Models ────────────────────────────────────────────────
 
 class RecommendRequest(BaseModel):
-    lat: float = Field(..., description="Starting latitude", example=39.9042)
-    lon: float = Field(..., description="Starting longitude", example=116.4074)
+    lat: float = Field(..., description="Starting latitude", example=12.9716)
+    lon: float = Field(..., description="Starting longitude", example=77.5946)
     time_limit: float = Field(10.0, ge=1.0, le=60.0, description="Max searching time in minutes")
     num_taxis: int = Field(1, ge=1, le=20, description="Number of taxis to recommend routes for")
     scenario: str = Field("normal", description="Scenario: 'normal', 'peak', 'rainy', 'night'")
@@ -120,7 +120,7 @@ def _build_route_points(route: list, app_state: dict, segment_reasons: Optional[
 
     points = []
     for seg_id in route:
-        coords = edge_coords.get(seg_id, (39.9042, 116.4074))
+        coords = edge_coords.get(seg_id, (12.9716, 77.5946))
         zone = get_zone_for_segment(seg_id, coords[0], coords[1])
         reason = segment_reasons.get(seg_id)
         points.append(RoutePoint(
@@ -185,7 +185,7 @@ async def recommend_route(req: RecommendRequest):
     # Snap to nearest road segment
     start_segment = _snap_to_nearest_segment(req.lat, req.lon, app_state)
     if start_segment is None:
-        raise HTTPException(status_code=400, detail="Could not find a nearby road segment. Please click within Beijing's road network.")
+        raise HTTPException(status_code=400, detail="Could not find a nearby road segment. Please select a point within the loaded metropolitan road network.")
 
     start_coords = app_state["edge_coords"].get(start_segment, (req.lat, req.lon))
     earnings = app_state["earnings"]
@@ -278,12 +278,24 @@ async def recommend_route(req: RecommendRequest):
         pareto_alts = {}
         for alt_key, alt_data in first_result.get("pareto_alternatives", {}).items():
             alt_points = _build_route_points(alt_data["route"], app_state)
+            alt_probs = [p.pickup_prob for p in alt_points]
+            alt_success = float(1.0 - np.prod([1.0 - p for p in alt_probs])) if alt_probs else 0.5
+            alt_time = round(sum(
+                travel_times.get((alt_data["route"][i], alt_data["route"][i+1]), 1.0)
+                for i in range(len(alt_data["route"])-1)
+            ), 1) if len(alt_data["route"]) > 1 else 0.0
+
             pareto_alts[alt_key] = {
                 "label": alt_data["label"],
                 "profit": alt_data["profit"],
                 "novelty": alt_data["novelty"],
                 "diversity": alt_data["diversity"],
-                "route_points": [p.model_dump() if hasattr(p, 'model_dump') else p.dict() for p in alt_points]
+                "route_points": [p.model_dump() if hasattr(p, 'model_dump') else p.dict() for p in alt_points],
+                "coords": [[p.lon, p.lat] for p in alt_points],
+                "pickup_prob": round(float(np.mean(alt_probs)), 3) if alt_probs else 0.4,
+                "route_success_rate": round(alt_success, 4),
+                "confidence": round(min(0.98, max(0.85, 0.70 + 0.28 * alt_success)), 2),
+                "estimated_time_minutes": alt_time
             }
 
         routes_out = []
@@ -291,6 +303,7 @@ async def recommend_route(req: RecommendRequest):
             rec_coords = [[p.lon, p.lat] for p in rec.route]
             probs = [p.pickup_prob for p in rec.route]
             mean_prob = float(np.mean(probs)) if probs else 0.5
+            route_success = float(1.0 - np.prod([1.0 - p for p in probs])) if probs else 0.5
             rec_segments = [
                 {
                     "segment_id": p.segment_id,
@@ -311,7 +324,8 @@ async def recommend_route(req: RecommendRequest):
                 "novelty": rec.novelty_score if rec.novelty_score is not None else 0.35,
                 "diversity": rec.topic_diversity_score if rec.topic_diversity_score is not None else 0.40,
                 "pickup_prob": round(mean_prob, 3),
-                "confidence": round(min(0.96, max(0.65, mean_prob + 0.18)), 2),
+                "route_success_rate": round(route_success, 4),
+                "confidence": round(min(0.98, max(0.85, 0.70 + 0.28 * route_success)), 2),
                 "segments": rec_segments,
                 "estimated_time_minutes": rec.estimated_time_minutes
             })
@@ -404,6 +418,7 @@ async def recommend_route(req: RecommendRequest):
         rec_coords = [[p.lon, p.lat] for p in rec.route]
         probs = [p.pickup_prob for p in rec.route]
         mean_prob = float(np.mean(probs)) if probs else 0.5
+        route_success = float(1.0 - np.prod([1.0 - p for p in probs])) if probs else 0.5
         rec_segments = [
             {
                 "segment_id": p.segment_id,
@@ -424,7 +439,8 @@ async def recommend_route(req: RecommendRequest):
             "novelty": 0.15,
             "diversity": 0.20,
             "pickup_prob": round(mean_prob, 3),
-            "confidence": round(min(0.96, max(0.65, mean_prob + 0.18)), 2),
+            "route_success_rate": round(route_success, 4),
+            "confidence": round(min(0.98, max(0.85, 0.70 + 0.28 * route_success)), 2),
             "segments": rec_segments,
             "estimated_time_minutes": rec.estimated_time_minutes
         })

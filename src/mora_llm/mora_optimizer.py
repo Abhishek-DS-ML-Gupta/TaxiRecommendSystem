@@ -87,7 +87,7 @@ class MORARouteOptimizer:
         # H(Lu) = sum_{j in sLu} - q_j log(q_j) * (|sLu| / Nt)
         zone_counts = {}
         for eid in route:
-            lat, lon = edge_coords.get(eid, (39.9, 116.4))
+            lat, lon = edge_coords.get(eid, (12.9716, 77.5946))
             z = get_zone_for_segment(eid, lat, lon)
             zone_counts[z] = zone_counts.get(z, 0) + 1
 
@@ -233,7 +233,7 @@ class MORARouteOptimizer:
             
             # Inject candidate segments matching driver profile
             for cand_id in top_candidates:
-                lat, lon = edge_coords.get(cand_id, (39.9, 116.4))
+                lat, lon = edge_coords.get(cand_id, (12.9716, 77.5946))
                 z = get_zone_for_segment(cand_id, lat, lon)
                 if z in pref_zones and cand_id not in llm_route:
                     # Replace a lower utility step

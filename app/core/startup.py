@@ -73,7 +73,7 @@ def load_all(data_dir: str = None, time_limit_tau: float = 10.0):
     Populates the global `app_state` dictionary.
     """
     if data_dir is None:
-        data_dir = os.path.join(os.path.dirname(__file__), '..', '..', 'data')
+        data_dir = os.path.join(os.path.dirname(__file__), '..', '..', 'data', 'indian_data', 'bangalore')
     data_dir = os.path.abspath(data_dir)
 
     print(f"[startup] Loading data from: {data_dir}", flush=True)
@@ -137,8 +137,8 @@ def load_all(data_dir: str = None, time_limit_tau: float = 10.0):
         if eid not in taxi_counts:
             taxi_counts[eid] = int(np.random.poisson(2) + 1)
         if eid not in edge_coords:
-            src_c = node_coords.get(src, (39.9, 116.4))
-            tgt_c = node_coords.get(tgt, (39.9, 116.4))
+            src_c = node_coords.get(src, (12.9716, 77.5946))
+            tgt_c = node_coords.get(tgt, (12.9716, 77.5946))
             edge_coords[eid] = (
                 (src_c[0] + tgt_c[0]) / 2.0,
                 (src_c[1] + tgt_c[1]) / 2.0
@@ -159,8 +159,8 @@ def load_all(data_dir: str = None, time_limit_tau: float = 10.0):
         src = int(row['source_id'])
 
         # Travel time: Euclidean distance proxy (degrees → minutes, rough)
-        src_c = node_coords.get(src, (39.9, 116.4))
-        tgt_c = node_coords.get(target_node, (39.9, 116.4))
+        src_c = node_coords.get(src, (12.9716, 77.5946))
+        tgt_c = node_coords.get(target_node, (12.9716, 77.5946))
         dist_deg = ((src_c[0] - tgt_c[0])**2 + (src_c[1] - tgt_c[1])**2)**0.5
         t_minutes = max(dist_deg * 100.0, 0.5)  # rough conversion
 

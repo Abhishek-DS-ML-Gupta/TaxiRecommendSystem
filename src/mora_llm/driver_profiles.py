@@ -9,7 +9,7 @@ to overcome the cold start problem for new drivers and personalize multi-objecti
 from typing import Dict, List, Any
 import numpy as np
 
-# Catalog of realistic driver profiles for the Beijing taxi market
+# Catalog of realistic driver profiles for the Bangalore taxi market
 DRIVER_PROFILES: Dict[str, Dict[str, Any]] = {
     "new_driver_cold_start": {
         "id": "driver_newbie",
@@ -35,9 +35,9 @@ DRIVER_PROFILES: Dict[str, Dict[str, Any]] = {
         "experience_years": 8.5,
         "is_cold_start": False,
         "historical_rides_count": 1420,
-        "description": "Veteran taxi driver specializing in high-fare airport corridors (Capital Airport Express, 3rd/4th Ring Road, Beijing South Railway Station). Prefers fewer trips with high per-trip revenue (¥60+), willing to cruise slightly longer for premium fares.",
+        "description": "Veteran taxi driver specializing in high-fare airport corridors (Kempegowda Airport Express, Outer Ring Road, Majestic Railway Station). Prefers fewer trips with high per-trip revenue (₹350+), willing to cruise slightly longer for premium fares.",
         "preferred_zones": ["Transport Hub", "Business District", "Hotel Cluster"],
-        "avoid_zones": ["Narrow Alleys", "Hutong"],
+        "avoid_zones": ["Narrow Alleys", "Unpaved Roads"],
         "driving_preference": "maximum_profit",
         "max_cruising_tolerance_min": 18.0,
         "target_hourly_income": 85.0,
@@ -55,7 +55,7 @@ DRIVER_PROFILES: Dict[str, Dict[str, Any]] = {
         "experience_years": 4.2,
         "is_cold_start": False,
         "historical_rides_count": 890,
-        "description": "Active urban cruiser focusing on Chaoyang CBD, Sanlitun, Wangfujing, and Zhongguancun. Aims for rapid passenger turnover, minimal waiting, and quick consecutive trips with dense pickup probability.",
+        "description": "Active urban cruiser focusing on MG Road CBD, Indiranagar, Koramangala, and Whitefield. Aims for rapid passenger turnover, minimal waiting, and quick consecutive trips with dense pickup probability.",
         "preferred_zones": ["Commercial", "Entertainment", "Tech Hub"],
         "avoid_zones": ["Outskirts", "Highway Expressways"],
         "driving_preference": "high_turnover",
@@ -106,7 +106,7 @@ DRIVER_PROFILES: Dict[str, Dict[str, Any]] = {
     }
 }
 
-# Pre-defined Beijing Urban Zone Categories for Topic Diversity Objective
+# Urban Zone Categories for Topic Diversity Objective
 ZONE_TOPICS = [
     "Commercial & Retail",
     "Transport Hub (Airport / Station)",
@@ -118,7 +118,7 @@ ZONE_TOPICS = [
     "Hospital & Medical Center"
 ]
 
-def get_zone_for_segment(segment_id: int, lat: float = 39.9, lon: float = 116.4) -> str:
+def get_zone_for_segment(segment_id: int, lat: float = 12.9716, lon: float = 77.5946) -> str:
     """Assigns deterministic urban functional zone topics to road segments based on coordinates and ID."""
     # Deterministic spatial hash mapping to zone topics
     h = (int(segment_id) * 31 + int(lat * 1000) * 17 + int(lon * 1000) * 13) % len(ZONE_TOPICS)

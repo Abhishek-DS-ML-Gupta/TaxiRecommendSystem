@@ -103,6 +103,10 @@ async def get_network_summary() -> Dict[str, Any]:
     prob_values = list(pickup_probs.values())
     earn_values = [e for e in earnings.values() if e > 0]
 
+    city_name = "Bangalore, India"
+    area_name = "Metropolitan Area (Koramangala, Indiranagar, Whitefield, Electronic City)"
+    source_name = "YourCabs Bangalore Cab Dataset"
+
     return {
         "loaded": True,
         "total_intersections": app_state["G"].number_of_nodes(),
@@ -118,7 +122,7 @@ async def get_network_summary() -> Dict[str, Any]:
             "mean": round(float(np.mean(earn_values)), 2) if earn_values else 0,
             "max": round(float(np.max(earn_values)), 2) if earn_values else 0,
         },
-        "city": "Beijing, China",
-        "area": "3rd Ring Road area",
-        "data_source": "INFORMS JoC 2021.0112"
+        "city": city_name,
+        "area": area_name,
+        "data_source": source_name
     }

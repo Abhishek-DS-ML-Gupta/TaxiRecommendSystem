@@ -37,7 +37,10 @@ async def lifespan(app: FastAPI):
     print("[TAXI] Taxi Route Recommender -- Starting Up", flush=True)
     print("=" * 60, flush=True)
 
-    data_dir = os.path.join(os.path.dirname(__file__), '..', 'data')
+    # Exclusively use Bangalore, India dataset
+    data_dir = os.environ.get("DATA_DIR") or os.path.join(os.path.dirname(__file__), '..', 'data', 'indian_data', 'bangalore')
+    data_dir = os.path.abspath(data_dir)
+    print(f"[TAXI] Active Indian Dataset Directory: {data_dir}", flush=True)
     load_all(data_dir=data_dir, time_limit_tau=10.0)
 
     print("=" * 60, flush=True)
