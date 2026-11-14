@@ -23,7 +23,14 @@ class LLMRecommendationReasoner:
     """
     def __init__(self, alpha: float = 0.2, api_key: Optional[str] = None):
         self.alpha = alpha  # Weight factor for score correction (Eq. 8)
-        self.api_key = api_key or os.environ.get("OPENAI_API_KEY") or os.environ.get("DASHSCOPE_API_KEY")
+        self.api_key = (
+            api_key
+            or os.environ.get("JEV_TOKEN")
+            or os.environ.get("JEV_API_KEY")
+            or os.environ.get("OPENAI_API_KEY")
+            or os.environ.get("DASHSCOPE_API_KEY")
+        )
+        self.has_active_token = bool(self.api_key and len(self.api_key.strip()) > 8)
 
     def construct_prompt(
         self,

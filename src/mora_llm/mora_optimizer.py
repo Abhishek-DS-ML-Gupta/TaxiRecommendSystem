@@ -15,6 +15,7 @@ from typing import Dict, List, Tuple, Any, Optional
 from .leps_predictor import LEPSPredictor
 from .sde_fitness import ShiftBasedDensityEstimation
 from .llm_reasoner import LLMRecommendationReasoner
+from .jev_decision import JEVDecisionEngine
 from .driver_profiles import get_zone_for_segment, ZONE_TOPICS, DRIVER_PROFILES
 
 class MORARouteOptimizer:
@@ -49,6 +50,7 @@ class MORARouteOptimizer:
         self.leps = LEPSPredictor()
         self.sde = ShiftBasedDensityEstimation()
         self.reasoner = LLMRecommendationReasoner(alpha=alpha)
+        self.jev = JEVDecisionEngine(alpha=alpha)
 
     # ─── Multi-Objective Functions (Equations 2, 3, 4, 5) ─────────────────────
 

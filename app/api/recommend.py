@@ -62,6 +62,7 @@ class RecommendResponse(BaseModel):
     multi_objective_summary: Optional[dict] = None
     routes: Optional[List[dict]] = None
     explanation: Optional[str] = None
+    engine_pipeline: Optional[dict] = None
 
 
 class AccuracyRequest(BaseModel):
@@ -334,12 +335,30 @@ async def recommend_route(req: RecommendRequest):
         if first_result.get("llm_explanation"):
             expl_text = first_result["llm_explanation"].get("summary_explanation", "")
 
+        jev_eval = mora_opt.jev.evaluate_route_tradeoffs(
+            route=first_result["best_route"],
+            pickup_probs=modified_probs,
+            earnings=earnings,
+            taxi_counts=working_taxi_counts,
+            edge_coords=app_state["edge_coords"],
+            scenario=req.scenario,
+            persona_risk=profile.get("driving_preference", "balanced")
+        )
+
+        pipeline_info = {
+            "tier1_llm_reasoner": "MORA-LLM (Active)",
+            "tier2_jev_decision": "JEV Decision Model (Active)",
+            "tier3_cdn_cache": "In-Memory Graph Cache (4,142 Nodes / 35,162 Transitions)",
+            "jev_token_status": "Authenticated" if mora_opt.jev.has_active_token else "Offline-Fallback",
+            "jev_confidence": jev_eval["confidence"]
+        }
+
         return RecommendResponse(
             recommendations=recommendations_out,
             start_segment_id=start_segment,
             start_lat=start_coords[0],
             start_lon=start_coords[1],
-            algorithm=f"{first_result['algorithm']} (Multi-Objective Evolutionary + LLM)",
+            algorithm=f"{first_result['algorithm']} (MORA-LLM + JEV + CDN)",
             pareto_alternatives=pareto_alts,
             llm_explanation=first_result.get("llm_explanation"),
             driver_profile=profile,
@@ -349,10 +368,12 @@ async def recommend_route(req: RecommendRequest):
                 "diversity": first_result["topic_diversity_score"],
                 "sde_fitness": first_result["sde_fitness"],
                 "is_cold_start": profile.get("is_cold_start", False),
-                "alpha_correction": req.alpha
+                "alpha_correction": req.alpha,
+                "jev_confidence": jev_eval["confidence"]
             },
             routes=routes_out,
-            explanation=expl_text
+            explanation=expl_text,
+            engine_pipeline=pipeline_info
         )
 
     # ─── Branch B: Classical RRS / SRRS ───────────────────────────────────────

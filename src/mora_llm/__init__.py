@@ -7,6 +7,7 @@ from .mora_optimizer import MORARouteOptimizer
 from .leps_predictor import LEPSPredictor
 from .sde_fitness import ShiftBasedDensityEstimation
 from .llm_reasoner import LLMRecommendationReasoner
+from .jev_decision import JEVDecisionEngine
 from .embeddings import DriverEmbeddingGenerator
 from .driver_profiles import (
     DRIVER_PROFILES,
@@ -21,6 +22,7 @@ __all__ = [
     "LEPSPredictor",
     "ShiftBasedDensityEstimation",
     "LLMRecommendationReasoner",
+    "JEVDecisionEngine",
     "DriverEmbeddingGenerator",
     "DRIVER_PROFILES",
     "ZONE_TOPICS",
